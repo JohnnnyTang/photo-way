@@ -144,7 +144,6 @@ jobs:
       # TODO(Wave 2 · E): uncomment once the photoway CLI (build/serve/bundle writers) has merged, so the suite can
       # no longer fall back to the viewer reference layouts. Until then the fallback keeps main green.
       # PW_E2E_REQUIRE_CLI: "1"
-      PW_CLI: ${{ github.workspace }}/target/release/photoway${{ runner.os == 'Windows' && '.exe' || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -162,6 +161,11 @@ jobs:
           key: ${{ hashFiles('vcpkg/triplets/*') }}
       - name: Build CLI (release)
         run: cargo build --release -p photoway-cli
+      - name: Point the suite at the CLI
+        shell: bash
+        run: |
+          ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
+          echo "PW_CLI=$GITHUB_WORKSPACE/target/release/photoway$ext" >> "$GITHUB_ENV"
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
