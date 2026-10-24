@@ -102,7 +102,6 @@ jobs:
         with:
           # The vcpkg triplet is part of the build inputs for libheif-sys.
           key: ${{ hashFiles('vcpkg/triplets/*') }}
-
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace

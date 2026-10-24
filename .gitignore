@@ -9,3 +9,4 @@ app/src-tauri/release-bundle.config.json
 Thumbs.db
 /out/
 .claude/
+/.vcpkg/
