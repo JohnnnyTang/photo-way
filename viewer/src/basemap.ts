@@ -2,7 +2,6 @@ import type { FeatureCollection, Geometry } from "geojson";
 import type { StyleSpecification, SourceSpecification, LayerSpecification } from "@maplibre/maplibre-gl-style-spec";
 import { feature } from "topojson-client";
 import type { Topology } from "topojson-specification";
-import worldText from "../basemap/world.topo.json?raw";
 import type { Basemap } from "./model";
 import { T } from "./strings";
 import type { MapColors } from "./themes";
@@ -40,6 +39,8 @@ let worldCache: FeatureCollection | null = null;
 /** Decodes the embedded Natural Earth TopoJSON once; every feature is tagged `{ k: land|lake|river|border }`. */
 export function worldFeatures(): FeatureCollection {
   if (worldCache) return worldCache;
+  const worldText = document.getElementById("pw-basemap")?.textContent;
+  if (!worldText) throw new Error("Photo Way: offline basemap is missing (#pw-basemap)");
   const topo = JSON.parse(worldText) as Topology;
   const features: FeatureCollection["features"] = [];
   for (const k of Object.keys(topo.objects)) {

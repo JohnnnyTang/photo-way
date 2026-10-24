@@ -75,6 +75,7 @@ One file, no external requests except optional online map tiles.
   <script id="pw-data" type="application/json">{PROJECT_JSON}</script>
   <script id="pw-pack-thumbs" type="application/octet-stream" data-encoding="base64">{BASE64}</script>
   <!-- optional: pw-pack-full, same shape -->
+  <script id="pw-basemap" type="application/json">{BASEMAP_JSON}</script>
   <script>{viewer.js}</script>
 </body></html>
 ```
@@ -84,15 +85,17 @@ Escaping rules (the writer **must** apply them):
 - `{PROJECT_JSON}`: JSON with every `<` written as `\u003c` (prevents `</script>`/`<!--`), plus U+2028/U+2029 written as `\u2028`/`\u2029`.
 - `{viewer.js}` / `{viewer.css}`: every `</script` / `</style` (case-insensitive) replaced with `<\/script` / `<\/style`.
 - Packs: standard base64, no line breaks or other whitespace.
+- `{BASEMAP_JSON}`: the contents of `viewer/dist/world.topo.json`, with `<` and U+2028/U+2029 escaped as for `{PROJECT_JSON}`.
 
-`viewer.js` is self-contained: it embeds the MapLibre worker (as a string, started as a classic `blob:` worker)
-and the offline basemap (TopoJSON, ~0.6 MB). Templates never use `type="module"`, `fetch()` or `new Worker(<file URL>)`.
+`viewer.js` embeds the MapLibre worker (as a string, started as a classic `blob:` worker).
+The offline basemap is inlined as `#pw-basemap` (TopoJSON, ~0.6 MB). Templates never use
+`type="module"`, `fetch()` or `new Worker(<file URL>)`.
 
 ### 2.2 Bundle (`Format::Dir`, `Format::Zip`)
 
 ```
 <root>/
-├── index.html          # links assets + data.js; no inline data
+├── index.html          # links assets + data.js; inlines the offline basemap
 ├── data.js             # window.__PHOTOWAY__ = {PROJECT_JSON};   (same escaping as §2.1)
 ├── assets/viewer.js
 ├── assets/viewer.css
@@ -112,6 +115,7 @@ and the offline basemap (TopoJSON, ~0.6 MB). Templates never use `type="module"`
 | `{{PW_TITLE}}` | escaped title | escaped title |
 | `<!--PW_STYLES-->` | `<style>…</style>` | `<link rel="stylesheet" href="assets/viewer.css">` |
 | `<!--PW_DATA-->` | `pw-data` + pack scripts | `<script src="data.js"></script>` |
+| `<!--PW_BASEMAP-->` | `<script id="pw-basemap" type="application/json">…</script>` | Same inline basemap script |
 | `<!--PW_SCRIPTS-->` | `<script>…viewer.js…</script>` | `<script src="assets/viewer.js"></script>` |
 
 ---

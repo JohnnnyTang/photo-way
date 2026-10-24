@@ -74,6 +74,7 @@ export function buildPages({ project, dist, out }) {
   const js = readFileSync(join(dist, "viewer.js"), "utf8");
   const css = readFileSync(join(dist, "viewer.css"), "utf8");
   const template = readFileSync(join(dist, "template.html"), "utf8");
+  const basemap = readFileSync(join(dist, "world.topo.json"), "utf8");
   const fill = (tpl, map) => {
     let t = tpl;
     for (const [k, v] of Object.entries(map)) {
@@ -103,6 +104,7 @@ export function buildPages({ project, dist, out }) {
     "<!--PW_DATA-->":
       `<script id="pw-data" type="application/json">${escapeJson(JSON.stringify(single))}</script>\n` +
       `<script id="pw-pack-thumbs" type="application/octet-stream" data-encoding="base64" data-mime="image/jpeg">${pack}</script>`,
+    "<!--PW_BASEMAP-->": `<script id="pw-basemap" type="application/json">${escapeJson(basemap)}</script>`,
     "<!--PW_SCRIPTS-->": `<script>${escapeCode(js, "script")}</script>`,
   });
   rmSync(join(out, "single"), { recursive: true, force: true });
@@ -129,6 +131,7 @@ export function buildPages({ project, dist, out }) {
       "{{PW_TITLE}}": escapeHtml(bundle.title),
       "<!--PW_STYLES-->": '<link rel="stylesheet" href="assets/viewer.css">',
       "<!--PW_DATA-->": '<script src="data.js"></script>',
+      "<!--PW_BASEMAP-->": `<script id="pw-basemap" type="application/json">${escapeJson(basemap)}</script>`,
       "<!--PW_SCRIPTS-->": '<script src="assets/viewer.js"></script>',
     }),
   );

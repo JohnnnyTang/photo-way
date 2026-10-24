@@ -31,9 +31,19 @@ function maplibreClassicWorker(): Plugin {
   };
 }
 
+function devBasemap(): Plugin {
+  return {
+    name: "dev-inline-basemap",
+    transformIndexHtml(html) {
+      const basemap = readFileSync(new URL("./basemap/world.topo.json", import.meta.url), "utf8");
+      return html.replace("</body>", `<script id="pw-basemap" type="application/json">${basemap}</script></body>`);
+    },
+  };
+}
+
 // Output must be a classic script: no ES modules at runtime (file:// friendly).
 export default defineConfig({
-  plugins: [maplibreClassicWorker()],
+  plugins: [maplibreClassicWorker(), devBasemap()],
   test: { include: ["tests/unit/**/*.test.ts"] },
   // Dev server serves repo fixtures at / (e.g. /sample/data.js); never copied into dist.
   publicDir: "../fixtures",

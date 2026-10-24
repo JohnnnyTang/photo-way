@@ -1,6 +1,6 @@
 # Photo Way — Development Plan
 
-> Status: **approved** 2026-10-24 — decisions in §6 confirmed. Wave 0 done (spikes S1, S2 in `docs/spikes/`); Wave 1 next.
+> Status: **approved** 2026-10-24 — decisions in §6 confirmed. Wave 0 done; Wave 1 branches integrated locally. See `docs/WAVE1_GATE.md` for verification and remaining release gates.
 > Goal: a tiny, elegant desktop app (Windows + macOS) that turns a pile of geotagged
 > phone photos/videos into a **portable, self-contained, shareable** route map —
 > a single `.html` file or a small zip bundle — that works from `file://` and over HTTP.
