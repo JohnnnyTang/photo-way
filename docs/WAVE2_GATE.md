@@ -15,7 +15,7 @@ outputs and again with the real CLI (see "Output source" below); hosted CI is re
 | `fallback` | the CLI is missing or still prints "not implemented" | the reference layouts of `viewer/scripts/make-test-pages.mjs` on `fixtures/sample` (295 items); HTTP via a small Node static server |
 
 `PW_E2E_REQUIRE_CLI=1` makes an unusable CLI a hard error; it is set in the `e2e` job of `.github/workflows/ci.yml`.
-Local CLI run: 75 passed, 6 skipped (Chromium, Firefox, WebKit), `output-zip` budget included.
+Local CLI run: 84 passed, 6 skipped (Chromium, Firefox, WebKit), `output-zip` budget included.
 
 ## Gates covered by the suite
 
@@ -34,6 +34,30 @@ Run with `npm run test:e2e -w viewer` (all engines) or `npx playwright test --pr
 
 Readiness signal used by the specs: `window.__photoway__.stats()` reports `items > 0` and `map.loaded === true`
 (the perf spec also waits for the first `.pw-tl-item`).
+
+## Hosted CI
+
+The `E2E` jobs first failed on both OSes: a few thumbnails served by `photoway serve` never loaded. tiny_http's
+worker pool could queue a new connection behind idle browser keep-alive connections. `core::serve` now runs its own
+thread-per-connection HTTP/1.1 server (regression test: `many_open_keep_alive_connections_are_all_answered`). After
+that, every job was green on windows-latest, macos-latest and ubuntu-latest (run 40093387140), including
+`E2E (windows-latest)` and `E2E (macos-latest)`.
+
+## Manual app check (Windows 11)
+
+The end-to-end flow in the desktop app (`tauri dev --release`, libheif on) on real geotagged phone photos: drop a
+folder, scan and process, options, live preview, export as single HTML / folder / zip, open in browser, reveal,
+serve, remembered settings. Outcome: all steps work.
+
+It caught one bug, fixed before the check passed: preview thumbnails were broken images because the `pw` protocol
+did not resolve `thumbs/...` refs (`bundle::thumb_for_ref`); exports were unaffected.
+
+The check also led to a viewer addition, covered by `trip-order.spec.ts` and `tests/unit/trip.test.ts`: day-to-day
+links readable on satellite (cased, dashed), and four switchable ways to read the trip's order (Filters > Trip
+order): colour by time with a legend, numbered stops, hover highlight with faint context around a chosen day, and
+playback.
+
+Not checked yet: the same flow on macOS.
 
 ## Known gaps
 
