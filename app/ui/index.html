@@ -3,10 +3,123 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Photo Way</title>
+<link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
-<main id="app"></main>
+<div class="app">
+  <aside class="side">
+    <header class="brand">
+      <h1>Photo Way</h1>
+      <span id="version" class="muted"></span>
+    </header>
+
+    <section class="card drop" id="add">
+      <p data-s="dropHint"></p>
+      <div class="row">
+        <button id="btn-files" data-s="addPhotos"></button>
+        <button id="btn-folder" data-s="addFolder"></button>
+      </div>
+    </section>
+
+    <section class="card" id="summary" hidden>
+      <div class="card-head">
+        <h2 data-s="summaryTitle"></h2>
+        <button id="btn-reset" class="link" data-s="startOver"></button>
+      </div>
+      <p id="summary-main"></p>
+      <p id="summary-dates" class="muted"></p>
+      <details id="skips" hidden>
+        <summary id="skips-summary"></summary>
+        <div id="skips-body"></div>
+      </details>
+    </section>
+
+    <section class="card" id="options" hidden>
+      <h2 data-s="optionsTitle"></h2>
+      <label class="field"><span data-s="optTitle"></span>
+        <input id="opt-title" type="text" maxlength="120">
+      </label>
+      <fieldset class="field">
+        <legend data-s="optFull"></legend>
+        <label class="radio"><input type="radio" name="full" value="none"> <span data-s="fullNone"></span></label>
+        <label class="radio"><input type="radio" name="full" value="web"> <span data-s="fullWeb"></span></label>
+        <label class="radio"><input type="radio" name="full" value="original"> <span data-s="fullOriginal"></span></label>
+      </fieldset>
+      <label class="field" id="edge-field"><span data-s="optEdge"></span>
+        <select id="opt-edge"></select>
+      </label>
+      <label class="check"><input id="opt-video" type="checkbox"> <span data-s="optVideo"></span></label>
+      <label class="check"><input id="opt-exif" type="checkbox"> <span data-s="optExif"></span></label>
+      <label class="field"><span data-s="optPrecision"></span>
+        <select id="opt-precision"></select>
+      </label>
+      <label class="field"><span data-s="optBasemap"></span>
+        <select id="opt-basemap"></select>
+      </label>
+      <label class="field"><span data-s="optTheme"></span>
+        <select id="opt-theme"></select>
+      </label>
+    </section>
+
+    <section class="card" id="progress" hidden>
+      <p id="progress-label"></p>
+      <progress id="progress-bar" max="100" value="0"></progress>
+      <div class="row between">
+        <span id="progress-detail" class="muted"></span>
+        <button id="btn-cancel" class="link" data-s="cancel"></button>
+      </div>
+    </section>
+
+    <section class="actions" id="actions" hidden>
+      <p id="stale" class="note" hidden></p>
+      <button id="btn-build" class="primary"></button>
+      <button id="btn-export" data-s="exportButton" disabled></button>
+    </section>
+
+    <section class="card" id="result" hidden>
+      <h2 data-s="resultTitle"></h2>
+      <p id="result-path" class="path"></p>
+      <div class="row wrap">
+        <button id="btn-open" data-s="openBrowser"></button>
+        <button id="btn-reveal" data-s="reveal"></button>
+        <button id="btn-serve" data-s="serve"></button>
+      </div>
+      <p id="serve-info" class="muted" hidden></p>
+    </section>
+
+    <p id="message" class="message" hidden></p>
+  </aside>
+
+  <main class="stage">
+    <div id="empty" class="empty">
+      <h2 data-s="emptyTitle"></h2>
+      <p class="muted" data-s="emptyBody"></p>
+    </div>
+    <iframe id="preview" title="Preview" hidden></iframe>
+  </main>
+</div>
+
+<div id="drop-overlay" hidden><p data-s="dropOverlay"></p></div>
+
+<dialog id="export-dlg">
+  <form method="dialog" id="export-form">
+    <h2 data-s="exportTitle"></h2>
+    <label class="choice"><input type="radio" name="format" value="html">
+      <span><strong data-s="fmtHtml"></strong><small data-s="fmtHtmlHint"></small></span><em id="est-html"></em></label>
+    <label class="choice"><input type="radio" name="format" value="dir">
+      <span><strong data-s="fmtDir"></strong><small data-s="fmtDirHint"></small></span><em id="est-dir"></em></label>
+    <label class="choice"><input type="radio" name="format" value="zip">
+      <span><strong data-s="fmtZip"></strong><small data-s="fmtZipHint"></small></span><em id="est-zip"></em></label>
+    <p id="export-warn" class="note" hidden></p>
+    <div class="row end">
+      <button type="button" id="export-cancel" data-s="cancel"></button>
+      <button type="submit" id="export-go" class="primary" data-s="exportGo"></button>
+    </div>
+  </form>
+</dialog>
+
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
