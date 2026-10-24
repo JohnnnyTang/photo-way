@@ -156,7 +156,7 @@ export async function waitReady(page: Page): Promise<void> {
   await page.waitForFunction(() => {
     const s = (window as any).__photoway__?.stats?.();
     return !!s && s.items > 0 && s.map?.loaded === true;
-  }, undefined, { timeout: 20_000 });
+  }, undefined, { timeout: 30_000 }); // software WebGL on CI runners can be slow
 }
 
 export const projectOf = (page: Page): Promise<ViewerProject> =>

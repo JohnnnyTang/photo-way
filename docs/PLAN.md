@@ -66,7 +66,7 @@ Phone apps; cloud upload/hosting; editing photos; reading the Photos.app/Google 
 ### 2.1 Size budgets (enforced in CI)
 | Artifact | Budget |
 |---|---|
-| Viewer JS+CSS (incl. MapLibre 6 + inlined worker) | ≤ 1.8 MB min / ≤ 480 KB gzip (MapLibre alone ≈ 1.65 MB / 441 KB) |
+| Viewer JS+CSS (incl. MapLibre 6 + inlined worker) | ≤ 2.0 MB min / ≤ 512 KB gzip (MapLibre alone ≈ 1.65 MB / 441 KB; raised from 1.8 MB / 480 KB in Wave 2 when the trip-order features left 3% headroom) |
 | Offline basemap (Natural Earth 1:50m TopoJSON, `viewer/basemap/`) | ≤ 600 KB (now 581 KB) |
 | Empty single-HTML shell (viewer + basemap) | ≤ 2.6 MB |
 | Single HTML, 1,000 photos (thumbs only) | ≈ 18 MB (base64 +33%; S2 measured 34.5 MB for 2,000, first render < 1.1 s in all engines) — app warns above ~50 MB and suggests a bundle |

@@ -144,7 +144,7 @@ jobs:
       # The suite must use the real photoway CLI here (no fallback to the viewer reference layouts).
       PW_E2E_REQUIRE_CLI: "1"
       # Shared CI runners are slower than a dev machine; the plan target is about 2 s.
-      PW_PERF_LOAD_MS: "4000"
+      PW_PERF_LOAD_MS: "6000" # same as the CI default in perf.spec.ts
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

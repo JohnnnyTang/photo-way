@@ -11,7 +11,7 @@ for (const kind of ["single", "bundle"] as const) {
     page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
     await page.goto(pageUrl(kind));
     await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.items)).toBe(295);
-    await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded)).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
     await expect(page.locator(".pw-tl-item").first()).toBeVisible();
     await page.getByRole("button", { name: "Theme" }).click();
     await page.locator('.pw-themeopt[data-id="dark"]').click();
@@ -24,7 +24,7 @@ for (const kind of ["single", "bundle"] as const) {
 
 test("visibility edits persist and a saved copy reopens with its own project id", async ({ page }, testInfo) => {
   await page.goto(pageUrl("single"));
-  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
   const originalId = await page.locator("#pw-data").evaluate((el) => JSON.parse(el.textContent!).id as string);
   await page.locator(".pw-tl-item input[type=checkbox]").first().uncheck();
   await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.hidden)).toBe(1);
@@ -50,7 +50,7 @@ test("visibility edits persist and a saved copy reopens with its own project id"
 
 test("filters, day navigation, and keyboard media navigation work offline", async ({ page }) => {
   await page.goto(pageUrl("single"));
-  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
   await page.getByRole("button", { name: "Filters" }).click();
   await page.locator('.pw-seg-btn[data-v="video"]').click();
   const videoCount = await page.evaluate(() => (window as any).__photoway__.stats().onMap as number);
@@ -73,7 +73,7 @@ test("filters, day navigation, and keyboard media navigation work offline", asyn
 test("5,000 items keep the timeline and map marker DOM bounded", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   await page.goto(pageUrl("single"));
-  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
   await page.evaluate(() => {
     const project = JSON.parse(document.getElementById("pw-data")!.textContent!);
     const base = project.items[0];
@@ -85,7 +85,7 @@ test("5,000 items keep the timeline and map marker DOM bounded", async ({ page }
     }));
     (window as any).__photoway__.setProject(project);
   });
-  await expect.poll(() => page.evaluate(() => (window as any).__photoway__.stats().map?.loaded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__.stats().map?.loaded), { timeout: 30_000 }).toBe(true);
   const stats = await page.evaluate(() => (window as any).__photoway__.stats() as { items: number; timelineNodes: number; map: { pins: number } });
   expect(stats.items).toBe(5000);
   expect(stats.timelineNodes).toBeLessThan(100);

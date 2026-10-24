@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: "tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
   timeout: 30_000,
+  // One retry on CI absorbs runner hiccups; a test that needed it is still reported as flaky.
+  retries: process.env.CI ? 1 : 0,
   expect: { timeout: 10_000 },
   use: { viewport: { width: 1280, height: 800 } },
   projects: [

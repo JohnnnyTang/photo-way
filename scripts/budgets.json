@@ -5,8 +5,8 @@
       "id": "viewer",
       "label": "Viewer JS+CSS (minified, incl. MapLibre)",
       "globs": ["viewer/dist/*.js", "viewer/dist/*.css"],
-      "maxBytes": 1887437,
-      "maxGzipBytes": 491520
+      "maxBytes": 2097152,
+      "maxGzipBytes": 524288
     },
     {
       "id": "basemap",

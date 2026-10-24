@@ -10,7 +10,7 @@ async function open(page: Page, errors: string[]) {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await page.goto(pageUrl);
-  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
 }
 
 const toggle = async (page: Page, key: "timeColor" | "numbers" | "highlight") => {
@@ -39,7 +39,7 @@ test("colour by time and numbered stops are switches that persist", async ({ pag
   expect(await page.locator(".pw-tl-item.has-trip").count()).toBe(0);
 
   await page.reload();
-  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
   s = await stats(page);
   expect(s.map.look).toEqual({ timeColor: false, numbers: true, highlight: true });
   expect(s.numberedCards).toBeGreaterThan(0);
