@@ -69,8 +69,11 @@ jobs:
       - name: build (embedded-libheif)
         run: |
           start=$(date +%s)
-          cargo build --release --features embedded --target ${{ matrix.target }} -vv 2>&1 | tee build.log | grep -Ei 'warning|error|LIBDE265|Found|Could NOT|-- ' | head -200
-          status=${PIPESTATUS[0]}
+          set +e
+          cargo build --release --features embedded --target ${{ matrix.target }} -vv > build.log 2>&1
+          status=$?
+          set -e
+          grep -E '\] -- |libde265|LIBDE265|Could NOT|rustc-link|error|cargo:warning' build.log | grep -v 'Running `' | cut -c1-300 | tail -150 || true
           echo "::notice::embedded ${{ matrix.target }} build exit=$status in $(( $(date +%s) - start ))s"
           exit $status
       - name: inspect + run
@@ -108,7 +111,14 @@ jobs:
       - name: tools
         run: |
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/vcpkg-bin"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$RUNNER_TEMP/vcpkg-bin,readwrite" >> "$GITHUB_ENV"
           cmake --version | head -1; which pkg-config || brew install pkgconf; which nasm || echo "no nasm (not needed)"
+      # vcpkg binary cache (zip per package ABI hash). A miss = clean build of libde265 + libheif.
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/vcpkg-bin
+          key: vcpkg-${{ matrix.triplet }}-${{ env.VCPKG_TAG }}-${{ hashFiles('spikes/heic/triplets/*') }}
       - name: vcpkg bootstrap
         run: |
           start=$(date +%s)
@@ -145,9 +155,13 @@ jobs:
       - name: build with libheif (clean)
         run: |
           start=$(date +%s)
-          cargo build --release --target ${{ matrix.target }} -vv 2>&1 | tee build.log | grep -E 'rustc-link|warning' | head -60
-          status=${PIPESTATUS[0]}
+          set +e
+          cargo build --release --target ${{ matrix.target }} -vv > build.log 2>&1
+          status=$?
+          set -e
           echo "HEIC_SECS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          grep -E 'rustc-link|cargo:warning|error' build.log | grep -v 'Running `' | cut -c1-400 | tail -80 || true
+          [ $status = 0 ] || tail -60 build.log
           exit $status
       - name: sizes + linkage
         run: |
