@@ -21,6 +21,24 @@
       "maxBytes": 2726297
     },
     {
+      "id": "output-html",
+      "label": "Fixture build, single HTML (shell + 20 KiB per item, up to 300 items)",
+      "globs": ["target/e2e-outputs/current/html/*.html"],
+      "maxBytes": 8912896
+    },
+    {
+      "id": "output-dir",
+      "label": "Fixture build, bundle folder (all files)",
+      "globs": ["target/e2e-outputs/current/dir/**/*"],
+      "maxBytes": 8912896
+    },
+    {
+      "id": "output-zip",
+      "label": "Fixture build, bundle zip (CLI only)",
+      "globs": ["target/e2e-outputs/current/zip/*.zip"],
+      "maxBytes": 8912896
+    },
+    {
       "id": "installer",
       "label": "Installers (each file)",
       "globs": [

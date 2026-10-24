@@ -2,12 +2,23 @@
 // ~300 items over 4 days, two time zones, a flight, injected GPS spikes, videos, Live Photos,
 // and one item without a capture time. Thumbnails are small SVGs (the viewer treats them as images).
 //
-//   node scripts/gen-sample-data.mjs
+//   node scripts/gen-sample-data.mjs [--count N] [--out DIR] [--no-thumbs]
+//     --count N      scale the per-day item counts so the project has about N items (default: 295)
+//     --out DIR      output directory (default: fixtures/sample)
+//     --no-thumbs    skip writing the SVG thumbnails (project.json and data.js only)
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "sample");
+const argv = process.argv.slice(2);
+const flag = (name) => {
+  const i = argv.indexOf(`--${name}`);
+  return i < 0 ? undefined : (argv[i + 1] ?? "");
+};
+const root = flag("out") ? resolve(flag("out")) : join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "sample");
+const wantCount = flag("count") ? Number(flag("count")) : null;
+if (wantCount !== null && !(Number.isInteger(wantCount) && wantCount >= 10)) throw new Error("--count must be an integer >= 10");
+const noThumbs = argv.includes("--no-thumbs");
 
 let seed = 20260723;
 const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
@@ -31,7 +42,9 @@ const iso = (ms, off) => {
   )}:${pad(d.getUTCSeconds())}${sign}${pad(Math.abs(off))}:00`;
 };
 
-for (const [day, off, lat0, lon0, heading, kmh, count] of days) {
+const baseTotal = days.reduce((n, d) => n + d[6], 0);
+for (const [day, off, lat0, lon0, heading, kmh, baseCount] of days) {
+  const count = wantCount === null ? baseCount : Math.max(1, Math.round((baseCount * wantCount) / baseTotal));
   let lat = lat0;
   let lon = lon0;
   let hdg = heading;
@@ -53,12 +66,13 @@ for (const [day, off, lat0, lon0, heading, kmh, count] of days) {
 // Injected GPS spikes (isolated jumps the outlier filter should flag).
 for (const at of [30, 120, 200]) {
   const it = items[at];
+  if (!it) continue;
   it.lat += 1.8;
   it.lon -= 2.4;
   it.spike = true;
 }
 // One item without capture time.
-items[150].noTime = true;
+if (items[150]) items[150].noTime = true;
 
 const out = items.map((it, id) => {
   const name = it.kind === "video" ? `IMG_${pad(1000 + id, 4)}.MOV` : `IMG_${pad(1000 + id, 4)}.HEIC`;
@@ -103,7 +117,7 @@ const project = {
 
 rmSync(root, { recursive: true, force: true });
 mkdirSync(join(root, "thumbs"), { recursive: true });
-for (const it of out) {
+for (const it of noThumbs ? [] : out) {
   const hue = Math.round((it.id * 137.5) % 360);
   const label = it.kind === "photo" ? "" : it.kind === "video" ? "▶" : "◎";
   writeFileSync(
@@ -118,4 +132,4 @@ for (const it of out) {
 const json = JSON.stringify(project).replace(/</g, "\\u003c");
 writeFileSync(join(root, "project.json"), JSON.stringify(project, null, 2));
 writeFileSync(join(root, "data.js"), `window.__PHOTOWAY__ = ${json};\n`);
-console.log(`fixtures/sample: ${out.length} items`);
+console.log(`${root}: ${out.length} items`);

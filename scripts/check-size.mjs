@@ -1,9 +1,10 @@
 // Enforces the size budgets in scripts/budgets.json (docs/PLAN.md section 2.1).
 // Usage: node scripts/check-size.mjs [--only id,id] [--require]
-//   --only     check just these budget ids (viewer, basemap, shell, installer)
+//   --only     check just these budget ids (viewer, basemap, shell, installer, output-html, output-dir, output-zip)
 //   --require  fail when a selected budget matches no files (default: skip it)
-// The "shell" budget looks for target/size-check/empty-shell.html; the export pipeline (Wave 2) writes it.
-import { readFileSync, globSync, appendFileSync } from "node:fs";
+// The "shell" budget looks for target/size-check/empty-shell.html and the output-* budgets for the fixture builds;
+// both are written by `node scripts/e2e-outputs.mjs` (the end-to-end suite runs it).
+import { readFileSync, globSync, appendFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -21,7 +22,10 @@ const rows = [];
 let failed = false;
 for (const b of budgets) {
   if (only && !only.includes(b.id)) continue;
-  const files = [...new Set(b.globs.flatMap((g) => globSync(g, { cwd: root })))].map((f) => f.replaceAll("\\", "/")).sort();
+  const files = [...new Set(b.globs.flatMap((g) => globSync(g, { cwd: root })))]
+    .filter((f) => statSync(resolve(root, f)).isFile())
+    .map((f) => f.replaceAll("\\", "/"))
+    .sort();
   if (files.length === 0) {
     if (require) failed = true;
     rows.push([b.id, "(no files)", "-", b.label, require ? "MISSING" : "skipped"]);
