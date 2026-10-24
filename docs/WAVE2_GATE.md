@@ -57,6 +57,8 @@ links readable on satellite (cased, dashed), and four switchable ways to read th
 order): colour by time with a legend, numbered stops, hover highlight with faint context around a chosen day, and
 playback.
 
+A single-HTML export from the app was also opened in a phone browser: everything works there too.
+
 Not checked yet: the same flow on macOS.
 
 ## Known gaps
