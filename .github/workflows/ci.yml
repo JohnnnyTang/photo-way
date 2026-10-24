@@ -165,7 +165,7 @@ jobs:
         shell: bash
         run: |
           ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
-          echo "PW_CLI=$GITHUB_WORKSPACE/target/release/photoway$ext" >> "$GITHUB_ENV"
+          echo "PW_CLI=${{ github.workspace }}/target/release/photoway$ext" >> "$GITHUB_ENV"
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
