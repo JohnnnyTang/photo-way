@@ -1,0 +1,5 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; background: Canvas; color: CanvasText; }
+#photoway { padding: 16px; }
+.pw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.pw-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }

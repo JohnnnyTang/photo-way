@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JohnnnyTang/photo-way/schema/photoway.v1.schema.json",
+  "title": "Photo Way project v1",
+  "type": "object",
+  "required": ["format", "version", "id", "title", "generator", "createdAt", "options", "items"],
+  "properties": {
+    "format": { "const": "photoway" },
+    "version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "generator": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "options": {
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string" },
+        "basemap": { "enum": ["auto", "offline", "satellite", "satellite-labels", "topo", "osm", "terrain"] },
+        "outlierSpeedKmh": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+  },
+  "$defs": {
+    "ref": {
+      "type": "string",
+      "pattern": "^(#pack:[a-z0-9-]+:[0-9]+:[0-9]+|(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\\\]+)$"
+    },
+    "item": {
+      "type": "object",
+      "required": ["id", "kind", "name", "time", "ts", "tsSource", "day", "lat", "lon", "w", "h", "thumb"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 0 },
+        "kind": { "enum": ["photo", "video", "live"] },
+        "name": { "type": "string" },
+        "time": { "type": ["string", "null"] },
+        "ts": { "type": ["integer", "null"] },
+        "tsSource": { "enum": ["offset", "gps", "naive", "file", null] },
+        "day": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+        "alt": { "type": ["number", "null"] },
+        "w": { "type": "integer", "minimum": 0 },
+        "h": { "type": "integer", "minimum": 0 },
+        "dur": { "type": ["number", "null"] },
+        "thumb": { "$ref": "#/$defs/ref" },
+        "full": { "anyOf": [{ "$ref": "#/$defs/ref" }, { "type": "null" }] },
+        "video": { "anyOf": [{ "$ref": "#/$defs/ref" }, { "type": "null" }] },
+        "flags": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

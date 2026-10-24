@@ -1,0 +1,9 @@
+/target/
+node_modules/
+dist/
+app/src-tauri/gen/schemas/
+/fixtures/sample/
+*.log
+.DS_Store
+Thumbs.db
+/out/

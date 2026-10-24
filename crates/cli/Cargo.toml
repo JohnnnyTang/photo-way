@@ -1,0 +1,17 @@
+[package]
+name = "photoway-cli"
+description = "Command-line interface for Photo Way"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "photoway"
+path = "src/main.rs"
+
+[dependencies]
+photoway-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true

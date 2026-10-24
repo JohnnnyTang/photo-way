@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Route Map · Esri</title>
+<link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Widgets/widgets.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body,html{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;background:#0a0a14}
+#app{display:flex;flex-direction:column;height:100vh;position:relative}
+
+/* Header */
+#header{padding:10px 20px;background:linear-gradient(135deg,#0d1117,#161b22);color:#e6edf3;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;z-index:1000;flex-shrink:0;box-shadow:0 2px 12px rgba(0,0,0,.5);border-bottom:1px solid #21262d}
+#header h1{font-size:18px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap}
+#header h1 .icon{font-size:22px}
+#header .stats{font-size:12px;color:#7d8590;white-space:nowrap}
+#header .controls{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+#header select,#header button{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+#header select:hover,#header button:hover{border-color:#58a6ff;background:#30363d}
+#header button.active{border-color:#58a6ff;color:#58a6ff}
+#header label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+#header label input{cursor:pointer}
+#header .zoom-slider{display:flex;align-items:center;gap:6px;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:4px 10px}
+#header .zoom-slider label{color:#7d8590;font-size:11px;white-space:nowrap}
+#header .zoom-slider input[type=range]{width:100px;height:4px;-webkit-appearance:none;background:#30363d;border-radius:2px;outline:none;cursor:pointer}
+#header .zoom-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#58a6ff;cursor:pointer;border:none}
+#header .zoom-slider input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#58a6ff;cursor:pointer;border:none}
+#header .zoom-slider .zoom-val{font-size:11px;color:#58a6ff;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* Cesium container */
+#map-container{flex:1;position:relative;min-height:0}
+#cesium-container{width:100%;height:100%;background:#0a0a14}
+.cesium-viewer-toolbar{display:none!important}
+.cesium-viewer-fullscreenContainer{display:none!important}
+.cesium-viewer-vrContainer{display:none!important}
+.cesium-viewer-bottom{display:none!important}
+.cesium-widget-credits{font-size:10px!important;opacity:.4!important}
+.cesium-viewer .cesium-widget canvas{outline:none}
+
+/* Floating info panel */
+#info-panel{position:absolute;top:12px;left:12px;background:rgba(13,17,23,.9);backdrop-filter:blur(12px);border:1px solid #30363d;border-radius:10px;padding:12px 16px;z-index:100;color:#c9d1d9;font-size:12px;max-width:280px;pointer-events:none;opacity:0;transition:opacity .2s}
+#info-panel.show{opacity:1}
+#info-panel .ip-title{font-weight:600;font-size:13px;color:#e6edf3;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#info-panel .ip-meta{color:#7d8590;font-size:11px}
+#info-panel .ip-coord{color:#58a6ff;font-size:11px;margin-top:2px}
+
+/* Timeline */
+#timeline-container{height:180px;background:rgba(13,17,23,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;flex-direction:column;flex-shrink:0;border-top:1px solid rgba(48,54,61,.6);position:absolute;bottom:0;left:0;right:0;z-index:500}
+#timeline-header{padding:8px 20px;color:#7d8590;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-shrink:0}
+#timeline-header .date-nav{display:flex;align-items:center;gap:4px;position:relative}
+#timeline-header .date-nav button{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;width:26px;height:26px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0;line-height:1}
+#timeline-header .date-nav button:hover{border-color:#58a6ff;background:#30363d}
+#timeline-header .date-nav button:disabled{opacity:.35;cursor:not-allowed}
+#timeline-header .date-nav select{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;max-width:180px}
+#timeline-header .date-nav select:hover{border-color:#58a6ff}
+#timeline-header .date-nav .vis-btn{width:30px;font-size:14px}
+#timeline-header .date-nav .vis-btn.all-visible{color:#3fb950;border-color:#238636}
+#timeline-header .date-nav .vis-btn.all-visible:hover{background:#238636;color:#fff}
+#timeline-header .date-nav .vis-btn.none-visible{color:#484f58;border-color:#30363d;opacity:.6}
+#timeline-header .date-nav .vis-btn.none-visible:hover{opacity:1}
+#timeline-header .date-nav .vis-btn.some-visible{color:#d29922;border-color:#9e6a03}
+#timeline-header .date-nav .vis-btn.some-visible:hover{background:#9e6a03;color:#fff}
+#timeline-header .date-nav #date-list-btn{width:auto;padding:0 10px;font-size:12px}
+
+/* Date list popover */
+#date-panel{display:none;position:absolute;top:34px;left:50%;transform:translateX(-50%);background:#161b22;border:1px solid #30363d;border-radius:10px;padding:6px;max-height:60vh;overflow-y:auto;z-index:1000;box-shadow:0 8px 32px rgba(0,0,0,.6);min-width:220px}
+#date-panel.open{display:block}
+#date-panel::-webkit-scrollbar{width:6px}
+#date-panel::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+.date-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;color:#c9d1d9;font-size:13px;white-space:nowrap}
+.date-row:hover{background:#21262d}
+.date-row.current{background:#1f6feb33;outline:1px solid #1f6feb66}
+.date-row .date-label{flex:1}
+.date-row .eye-btn{background:transparent;border:none;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:5px;opacity:.9}
+.date-row .eye-btn:hover{background:#30363d}
+.date-row .eye-btn.off{opacity:.3;filter:grayscale(1)}
+.vis-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.vis-dot.all{background:#3fb950}
+.vis-dot.none{background:transparent;border:2px solid #484f58}
+.vis-dot.some{background:linear-gradient(90deg,#3fb950 50%,#484f58 50%)}
+
+/* Timeline ⚠ suspect / ✎ corrected markers */
+.timeline-item.suspect{outline:2px dashed #f85149;outline-offset:-2px}
+.timeline-item .suspect-badge{position:absolute;top:4px;left:4px;background:rgba(248,81,73,.9);color:#fff;font-size:11px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:5}
+.timeline-item .fixed-badge{position:absolute;top:24px;left:4px;background:rgba(210,153,34,.9);color:#fff;font-size:10px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:5}
+#info-panel .ip-hint{color:#58a6ff;font-size:11px;margin-top:2px}
+#timeline{flex:1;overflow-x:auto;overflow-y:hidden;display:flex;align-items:center;padding:0 20px 10px;gap:8px;scroll-behavior:smooth;cursor:grab}
+#timeline.dragging{cursor:grabbing;user-select:none}
+#timeline.dragging .timeline-item{pointer-events:none}
+#timeline::-webkit-scrollbar{height:6px}
+#timeline::-webkit-scrollbar-track{background:transparent}
+#timeline::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+#timeline::-webkit-scrollbar-thumb:hover{background:#484f58}
+
+.timeline-item{flex-shrink:0;width:120px;height:120px;border-radius:10px;overflow:hidden;cursor:pointer;position:relative;border:2px solid transparent;transition:all .2s;background:#161b22}
+.timeline-item:hover{border-color:#58a6ff;transform:translateY(-3px);box-shadow:0 4px 16px rgba(88,166,255,.3)}
+.timeline-item.active{border-color:#f85149;box-shadow:0 0 16px rgba(248,81,73,.4)}
+.timeline-item img{width:100%;height:100%;object-fit:cover;display:block}
+.timeline-item .no-thumb{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:36px;color:#484f58}
+.timeline-item .badge{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600;letter-spacing:.5px}
+.timeline-item .badge.video{background:rgba(248,81,73,.85)}
+.timeline-item .badge.photo{background:rgba(88,166,255,.85)}
+.timeline-item .play-icon{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;color:rgba(255,255,255,.95);text-shadow:0 0 8px rgba(0,0,0,.7);pointer-events:none}
+.timeline-item .time-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));color:#fff;font-size:10px;padding:14px 6px 5px;pointer-events:none}
+.timeline-item .dur-label{position:absolute;top:4px;left:4px;background:rgba(0,0,0,.7);color:#fff;font-size:9px;padding:2px 5px;border-radius:4px}
+.timeline-item .vis-check{position:absolute;bottom:22px;right:4px;width:15px;height:15px;accent-color:#58a6ff;cursor:pointer;z-index:10;opacity:.85}
+.timeline-item.unchecked{opacity:.3;filter:grayscale(.7)}
+
+.date-separator{flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:70px;height:120px;color:#484f58;font-size:11px;text-align:center;border-left:1px solid #21262d;padding:0 8px;cursor:pointer;transition:all .2s;border-radius:8px}
+.date-separator:hover{background:rgba(88,166,255,.1)}
+.date-separator .day-toggle{font-size:16px;line-height:1;margin-bottom:4px;transition:color .2s}
+.date-separator .day-toggle::before{content:'\25CF'}
+.date-separator.all-visible .day-toggle{color:#3fb950}
+.date-separator.none-visible .day-toggle{color:#484f58}
+.date-separator.none-visible .day-toggle::before{content:'\25CB'}
+.date-separator.some-visible .day-toggle{color:#d29922}
+.date-separator.some-visible .day-toggle::before{content:'\25D0'}
+.date-separator.all-visible .day{color:#3fb950}
+.date-separator.none-visible .day{color:#484f58;opacity:.5}
+.date-separator .day{font-size:24px;font-weight:700;color:#7d8590}
+.date-separator .month{font-size:10px;color:#484f58;margin-top:2px}
+
+/* Modal */
+#modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;justify-content:center;align-items:center;flex-direction:column}
+#modal.show{display:flex}
+#modal-media{max-width:90vw;max-height:80vh;display:flex;justify-content:center;align-items:center}
+#modal-media img,#modal-media video{max-width:88vw;max-height:78vh;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+#modal-media .fallback{color:#7d8590;text-align:center;padding:40px;font-size:14px}
+#modal-media .fallback a{color:#58a6ff;text-decoration:underline}
+#modal-info{color:#ccd;font-size:13px;text-align:center;padding:12px 20px;max-width:90vw}
+#modal-info .filename{font-weight:600;color:#fff}
+#modal-info .meta{color:#7d8590;margin-top:3px;font-size:12px}
+.modal-nav{position:fixed;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);color:#fff;border:none;width:52px;height:52px;border-radius:50%;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;z-index:10000}
+.modal-nav:hover{background:rgba(255,255,255,.25)}
+#modal-prev{left:24px}
+#modal-next{right:24px}
+#modal-close{position:fixed;top:20px;right:24px;background:rgba(255,255,255,.12);color:#fff;border:none;width:42px;height:42px;border-radius:50%;font-size:22px;cursor:pointer;transition:background .2s;z-index:10000}
+#modal-close:hover{background:rgba(255,255,255,.25)}
+
+/* Loading */
+#loading{position:fixed;inset:0;background:#0a0a14;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;color:#7d8590}
+#loading .spinner{width:48px;height:48px;border:4px solid #21262d;border-top:4px solid #58a6ff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}
+#loading .text{font-size:14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Trajectory legend */
+#legend{position:absolute;bottom:192px;left:12px;background:rgba(13,17,23,.85);backdrop-filter:blur(10px);border:1px solid #30363d;border-radius:8px;padding:8px 12px;z-index:100;color:#c9d1d9;font-size:11px;display:flex;gap:16px;align-items:center}
+#legend .item{display:flex;align-items:center;gap:6px}
+#legend .dot{width:10px;height:10px;border-radius:50%}
+#legend .line{width:24px;height:3px;border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="text">Loading photo data...</div>
+</div>
+
+<div id="app" style="visibility:hidden">
+  <div id="header">
+    <h1><span class="icon">🌍</span> Photo Route Map</h1>
+    <div class="stats" id="stats"></div>
+    <div class="controls">
+      <label><input type="checkbox" id="toggle-path" checked> Route</label>
+      <label title="Hide GPS outliers based on speed between consecutive photos; timeline remains unchanged"><input type="checkbox" id="suspect-filter" checked> <span id="suspect-filter-label">Filter GPS outliers</span></label>
+      <select id="filter-type">
+        <option value="all">All</option>
+        <option value="photo">Photos only</option>
+        <option value="video">Videos only</option>
+      </select>
+      <select id="map-style-select">
+        <option value="satellite">🛰️ Esri Satellite</option>
+        <option value="hybrid">🛰️ Satellite + Labels</option>
+        <option value="topo">🏔️ Esri Topographic</option>
+        <option value="opentopo">⛰️ OpenTopoMap</option>
+        <option value="osm">🗺️ OSM Standard</option>
+        <option value="street">🗺️ Esri Streets</option>
+      </select>
+      <div class="zoom-slider">
+        <label>🔍 Zoom</label>
+        <input type="range" id="zoom-range" min="500" max="50000" step="500" value="6000">
+        <span class="zoom-val" id="zoom-val">6.0km</span>
+      </div>
+      <button id="btn-2d">2D / 3D</button>
+      <button id="btn-fit">⊕ Fit All</button>
+    </div>
+  </div>
+  <div id="map-container">
+    <div id="cesium-container"></div>
+    <div id="info-panel"></div>
+    <div id="legend">
+      <div class="item"><div class="dot" style="background:#3fb950"></div>Start</div>
+      <div class="item"><div class="dot" style="background:#f85149"></div>End</div>
+      <div class="item"><div class="line" style="background:#00BFFF"></div>Route <span style="color:#ff2d2d">➤</span> Red arrow = direction</div>
+    </div>
+  </div>
+  <div id="timeline-container">
+    <div id="timeline-header">
+      <span title="Click a photo to locate it; double-click to enlarge; use checkboxes to show it on the route; click a date to toggle that day">📅 Timeline · Click: locate · Double-click: enlarge · Checkbox: show on map · Date: toggle day</span>
+      <div class="date-nav">
+        <button id="date-prev" title="Previous day">‹</button>
+        <button id="date-list-btn" title="Open date list">📅 Date List ▾</button>
+        <button id="date-next" title="Next day">›</button>
+        <button id="date-toggle-vis" title="Toggle visibility for the selected day" class="vis-btn all-visible">👁</button>
+        <div id="date-panel"></div>
+      </div>
+      <span id="timeline-count"></span>
+    </div>
+    <div id="timeline"></div>
+  </div>
+</div>
+
+<div id="modal">
+  <button class="modal-nav" id="modal-prev">‹</button>
+  <div id="modal-media"></div>
+  <div id="modal-info"></div>
+  <button class="modal-nav" id="modal-next">›</button>
+  <button id="modal-close">×</button>
+</div>
+
+<script>window.CESIUM_BASE_URL = "https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/";</script>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Cesium.js"></script>
+<script>
+let DATA = [];
+let viewer;
+let billboardEntities = [];
+let trajectoryEntities = [];
+let startEndEntities = [];
+let currentFilter = 'all';
+let modalIndex = -1;
+let visibleIds = new Set();
+let is3D = true;
+let baseLayer = null;
+let overlayLayer = null;
+let cameraHeight = 6000;
+let isFlying = false;
+let dateList = [];
+let currentJumpIndex = -1;
+let filterSuspects = true;      // GPS outlier filter (enabled by default)
+let suspectCount = 0;
+let dragEntity = null;          // Photo entity being dragged
+let dragStartPos = null;
+let suppressClick = false;      // Suppress the click following a drag
+
+// ═══════════════════════════════════════════════════════════
+//  Cesium initialization
+// ═══════════════════════════════════════════════════════════
+
+function initCesium() {
+  const viewerOptions = {
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    baseLayerPicker: false,
+    navigationHelpButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+    shadows: false,
+    shouldAnimate: true,
+  };
+
+  try {
+    viewer = new Cesium.Viewer('cesium-container', {
+      ...viewerOptions,
+      baseLayer: false,
+    });
+  } catch (e) {
+    viewer = new Cesium.Viewer('cesium-container', viewerOptions);
+    viewer.imageryLayers.removeAll();
+  }
+
+  setMapStyle('satellite');
+
+  viewer.scene.globe.enableLighting = false;
+  viewer.scene.skyAtmosphere.show = true;
+  viewer.scene.fog.enabled = true;
+  viewer.scene.globe.showGroundAtmosphere = true;
+
+  const cam = viewer.scene.screenSpaceCameraController;
+  cam.enableTilt = true;
+  cam.minimumZoomDistance = 50;
+  cam.maximumZoomDistance = 40000000;
+
+  viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
+    Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK
+  );
+
+  viewer.camera.percentageChanged = 0.1;
+  viewer.camera.changed.addEventListener(function() {
+    if (isFlying) return;
+    const h = viewer.camera.positionCartographic.height;
+    if (h > 0 && h < 40000000) {
+      cameraHeight = Math.round(Math.max(500, Math.min(50000, h)));
+      const zoomRange = document.getElementById('zoom-range');
+      const zoomVal = document.getElementById('zoom-val');
+      if (zoomRange) zoomRange.value = cameraHeight;
+      if (zoomVal) zoomVal.textContent = formatHeight(cameraHeight);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Esri basemap switching
+// ═══════════════════════════════════════════════════════════
+
+const TILE_CONFIGS = {
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    maximumLevel: 19,
+    credit: 'Esri World Imagery',
+  },
+  topo: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    maximumLevel: 19,
+    credit: 'Esri World Topo',
+  },
+  street: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    maximumLevel: 19,
+    credit: 'Esri World Street',
+  },
+  opentopo: {
+    url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+    maximumLevel: 17,
+    credit: 'OpenTopoMap (CC-BY-SA)',
+  },
+  osm: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    maximumLevel: 19,
+    credit: 'OpenStreetMap',
+  },
+};
+
+const ESRI_REFERENCE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
+const OSM_LABELS_URL = 'https://cartodb-basemaps-{s}.global.ssl.fastly.net/rastertiles/voyager_only_labels/{z}/{x}/{y}.png';
+
+function setMapStyle(style) {
+  viewer.imageryLayers.removeAll();
+
+  if (style === 'hybrid') {
+    baseLayer = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: TILE_CONFIGS.satellite.url,
+        maximumLevel: 19,
+        credit: 'Esri World Imagery',
+      })
+    );
+    overlayLayer = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: OSM_LABELS_URL,
+        subdomains: ['a', 'b', 'c', 'd'],
+        maximumLevel: 19,
+      })
+    );
+    overlayLayer.alpha = 0.9;
+    return;
+  }
+
+  const cfg = TILE_CONFIGS[style];
+  if (!cfg) return;
+
+  baseLayer = viewer.imageryLayers.addImageryProvider(
+    new Cesium.UrlTemplateImageryProvider({
+      url: cfg.url,
+      maximumLevel: cfg.maximumLevel,
+      credit: cfg.credit,
+    })
+  );
+
+  if (style === 'satellite') {
+    overlayLayer = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: ESRI_REFERENCE_URL,
+        maximumLevel: 19,
+      })
+    );
+  } else {
+    overlayLayer = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Adaptive interpolation: straight lines nearby, curves over long distances
+// ═══════════════════════════════════════════════════════════
+
+// Single-segment Catmull-Rom interpolation (p0/p3 are control points; p1 to p2 is the actual segment)
+function catmullRomSegment(p0, p1, p2, p3, segments) {
+  const result = [];
+  for (let j = 0; j < segments; j++) {
+    const t = j / segments;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const lat = 0.5 * (
+      (2 * p1.lat) +
+      (-p0.lat + p2.lat) * t +
+      (2 * p0.lat - 5 * p1.lat + 4 * p2.lat - p3.lat) * t2 +
+      (-p0.lat + 3 * p1.lat - 3 * p2.lat + p3.lat) * t3
+    );
+    const lon = 0.5 * (
+      (2 * p1.lon) +
+      (-p0.lon + p2.lon) * t +
+      (2 * p0.lon - 5 * p1.lon + 4 * p2.lon - p3.lon) * t2 +
+      (-p0.lon + 3 * p1.lon - 3 * p2.lon + p3.lon) * t3
+    );
+    result.push({ lat, lon });
+  }
+  return result;
+}
+
+// Adaptive interpolation: straight lines for nearby points, Catmull-Rom curves for distant points
+function adaptiveInterpolate(points, segments, closeThresholdKm) {
+  if (points.length < 2) return points;
+  if (points.length === 2) return [points[0], points[1]];
+
+  const result = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const dist = haversine(p1, p2);
+
+    if (dist < closeThresholdKm) {
+      // Nearby: use a straight line, adding only the start (the next segment or final point adds the end).
+      result.push(p1);
+    } else {
+      // Distant: use a Catmull-Rom curve.
+      const p0 = points[Math.max(0, i - 1)];
+      const p3 = points[Math.min(points.length - 1, i + 2)];
+      const seg = catmullRomSegment(p0, p1, p2, p3, segments);
+      result.push(...seg);
+    }
+  }
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+function deduplicatePoints(points, minDist) {
+  if (points.length === 0) return points;
+  const result = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const last = result[result.length - 1];
+    const dist = Math.sqrt(
+      Math.pow(points[i].lat - last.lat, 2) +
+      Math.pow(points[i].lon - last.lon, 2)
+    );
+    if (dist > minDist) {
+      result.push(points[i]);
+    }
+  }
+  return result;
+}
+
+function haversine(p1, p2) {
+  const R = 6371;
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function totalDistance(points) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += haversine(points[i - 1], points[i]);
+  }
+  return total;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GPS outlier detection
+//  Sort photos by time and calculate speed between adjacent photos. Segments
+//  above 300 km/h are abnormal. Flag only isolated spikes; longer runs can
+//  represent genuine high-speed travel, such as a flight or high-speed train:
+//    - Run length 1: flag both photos at the segment ends.
+//    - Run length 2: flag the middle photo.
+//    - Run length >= 3: treat as genuine high-speed travel.
+// ═══════════════════════════════════════════════════════════
+
+function computeSuspects() {
+  DATA.forEach(d => d.suspect = false);
+  const geo = DATA
+    .filter(d => d.lat && d.lon && d.timestamp)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  if (geo.length < 3) return;
+
+  const THRESH = 300; // km/h
+  const fast = [];
+  for (let i = 0; i < geo.length - 1; i++) {
+    const dt = geo[i + 1].timestamp - geo[i].timestamp;
+    const dist = haversine(geo[i], geo[i + 1]);
+    // A large distance within the same second is abnormal; otherwise check speed.
+    const speed = dt > 1 ? (dist / dt) * 3600 : (dist > 0.5 ? Infinity : 0);
+    fast.push(speed > THRESH);
+  }
+
+  // Find consecutive fast-segment runs and flag photos based on run length.
+  let i = 0;
+  while (i < fast.length) {
+    if (!fast[i]) { i++; continue; }
+    let j = i;
+    while (j < fast.length && fast[j]) j++;
+    const runLen = j - i;
+    if (runLen === 1) {
+      geo[i].suspect = true;
+      geo[i + 1].suspect = true;
+    } else if (runLen === 2) {
+      geo[i + 1].suspect = true;
+    }
+    // Run length >= 3 indicates genuine high-speed travel; do not flag it.
+    i = j;
+  }
+
+  suspectCount = DATA.filter(d => d.suspect).length;
+}
+
+// Whether to show an item on the map (checkbox and GPS outlier filter).
+function isShownOnMap(item) {
+  if (!visibleIds.has(item.id)) return false;
+  if (filterSuspects && item.suspect) return false;
+  // Show photos from the selected date only.
+  if (currentJumpIndex >= 0 && currentJumpIndex < dateList.length) {
+    const dt = new Date(item.timestamp * 1000);
+    if (dt.toDateString() !== dateList[currentJumpIndex].key) return false;
+  }
+  return true;
+}
+
+// Redraw the route, refresh billboard visibility, and update statistics.
+// Draw only the route for the selected date (none if no date is selected).
+function refreshTrajectoryAndStats() {
+  let visibleSorted;
+  if (currentJumpIndex >= 0 && currentJumpIndex < dateList.length) {
+    // Draw only this day's route.
+    const d = dateList[currentJumpIndex];
+    visibleSorted = DATA
+      .filter(item => {
+        const dt = new Date(item.timestamp * 1000);
+        return dt.toDateString() === d.key && isShownOnMap(item);
+      })
+      .sort((a, b) => a.timestamp - b.timestamp);
+  } else {
+    visibleSorted = [];
+  }
+  const distance = drawTrajectory(visibleSorted);
+  // Refresh billboard visibility for this day's photos.
+  refreshBillboardVisibility();
+  // Respect the Route checkbox state.
+  const showPath = document.getElementById('toggle-path').checked;
+  trajectoryEntities.forEach(e => { e.show = showPath; });
+  startEndEntities.forEach(e => { e.show = showPath; });
+  updateStats(distance);
+}
+
+function refreshBillboardVisibility() {
+  billboardEntities.forEach(entity => {
+    const itemId = entity.properties.itemId.getValue();
+    const item = DATA.find(d => d.id === itemId);
+    if (item) {
+      entity.show = isShownOnMap(item) && (currentFilter === 'all' || item.type === currentFilter);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Persist dragged location corrections in localStorage by filename.
+// ═══════════════════════════════════════════════════════════
+
+function loadGeoFixes() {
+  try {
+    const fixes = JSON.parse(localStorage.getItem('photoGeoFixes') || '{}');
+    let applied = 0;
+    DATA.forEach(d => {
+      if (fixes[d.filename]) {
+        d.lat = fixes[d.filename].lat;
+        d.lon = fixes[d.filename].lon;
+        d.fixed = true;
+        applied++;
+      }
+    });
+    if (applied > 0) console.log('Applied ' + applied + ' manual location corrections');
+  } catch (e) { /* Ignore unavailable localStorage. */ }
+}
+
+function saveGeoFix(item) {
+  try {
+    const fixes = JSON.parse(localStorage.getItem('photoGeoFixes') || '{}');
+    fixes[item.filename] = { lat: item.lat, lon: item.lon };
+    localStorage.setItem('photoGeoFixes', JSON.stringify(fixes));
+  } catch (e) { /* Ignore storage errors. */ }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Billboard
+// ═══════════════════════════════════════════════════════════
+
+function addBillboards(items) {
+  billboardEntities.forEach(e => viewer.entities.remove(e));
+  billboardEntities = [];
+
+  items.forEach(item => {
+    if (!item.lat || !item.lon) return;
+    if (!item.thumb) return;
+
+    const isVideo = item.type === 'video';
+    const entity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(item.lon, item.lat),
+      properties: {
+        itemId: item.id,
+      },
+      billboard: {
+        image: item.thumb,
+        width: 56,
+        height: 65,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scaleByDistance: new Cesium.NearFarScalar(5e2, 1.0, 5e6, 0.5),
+        translucencyByDistance: new Cesium.NearFarScalar(1e6, 1.0, 8e6, 0.0),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        show: isShownOnMap(item) && (currentFilter === 'all' || item.type === currentFilter),
+      },
+    });
+    billboardEntities.push(entity);
+
+    // Compose a thumbnail with a date and time label.
+    const img = new Image();
+    img.onload = function() {
+      const w = 56, h = 65, labelH = 16;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h + labelH;
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(img, 0, 0, w, h);
+
+      if (isVideo) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.arc(w / 2, h / 2, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('\u25B6', w / 2, h / 2);
+      }
+
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(0, h, w, labelH);
+
+      ctx.fillStyle = '#fff';
+      ctx.font = '8px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const dt = new Date(item.timestamp * 1000);
+      const dateStr = (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + formatTime(dt);
+      ctx.fillText(dateStr, w / 2, h + labelH / 2);
+
+      entity.billboard.image = canvas;
+      entity.billboard.width = w;
+      entity.billboard.height = h + labelH;
+    };
+    img.src = item.thumb;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Route drawing
+// ═══════════════════════════════════════════════════════════
+
+function drawTrajectory(sortedItems) {
+  trajectoryEntities.forEach(e => viewer.entities.remove(e));
+  trajectoryEntities = [];
+  startEndEntities.forEach(e => viewer.entities.remove(e));
+  startEndEntities = [];
+
+  const validItems = sortedItems.filter(d => d.lat && d.lon);
+  if (validItems.length < 2) return;
+
+  const points = validItems.map(d => ({ lat: d.lat, lon: d.lon }));
+
+  // Draw a separate line and arrow for each adjacent pair of photos.
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+
+    // Skip nearly coincident points.
+    const dLat = p2.lat - p1.lat;
+    const dLon = p2.lon - p1.lon;
+    if (Math.abs(dLat) < 1e-6 && Math.abs(dLon) < 1e-6) continue;
+
+    // Main segment (thick, 2 m above ground).
+    const entity = viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+          p1.lon, p1.lat, 2,
+          p2.lon, p2.lat, 2,
+        ]),
+        width: 8,
+        material: new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString('#00BFFF').withAlpha(0.9)
+        ),
+        arcType: Cesium.ArcType.NONE,
+      },
+    });
+    trajectoryEntities.push(entity);
+
+    // Red direction arrow covers 38%-62% of the segment, pointing to the later photo.
+    // Place it 3 m high so it renders above the main line.
+    const aLat = p1.lat + (p2.lat - p1.lat) * 0.38;
+    const aLon = p1.lon + (p2.lon - p1.lon) * 0.38;
+    const bLat = p1.lat + (p2.lat - p1.lat) * 0.62;
+    const bLon = p1.lon + (p2.lon - p1.lon) * 0.62;
+    const arrowEntity = viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+          aLon, aLat, 3,
+          bLon, bLat, 3,
+        ]),
+        width: 12,
+        material: new Cesium.PolylineArrowMaterialProperty(
+          Cesium.Color.fromCssColorString('#ff2d2d')
+        ),
+        arcType: Cesium.ArcType.NONE,
+      },
+    });
+    trajectoryEntities.push(arrowEntity);
+  }
+
+  startEndEntities.push(viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(points[0].lon, points[0].lat),
+    point: {
+      pixelSize: 14,
+      color: Cesium.Color.fromCssColorString('#3fb950'),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 3,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: 'START',
+      font: 'bold 11px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -20),
+      showBackground: true,
+      backgroundColor: Cesium.Color.fromCssColorString('#3fb950').withAlpha(0.8),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  }));
+
+  startEndEntities.push(viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(points[points.length - 1].lon, points[points.length - 1].lat),
+    point: {
+      pixelSize: 14,
+      color: Cesium.Color.fromCssColorString('#f85149'),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 3,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: 'END',
+      font: 'bold 11px sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -20),
+      showBackground: true,
+      backgroundColor: Cesium.Color.fromCssColorString('#f85149').withAlpha(0.8),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  }));
+
+  return totalDistance(points);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Interaction handling
+// ═══════════════════════════════════════════════════════════
+
+function setupInteraction() {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  // ── Drag a photo to correct its location ──
+  handler.setInputAction((movement) => {
+    const picked = viewer.scene.pick(movement.position);
+    if (Cesium.defined(picked) && picked.id && picked.id.properties &&
+        picked.id.properties.itemId !== undefined) {
+      dragEntity = picked.id;
+      dragStartPos = movement.position;
+      // Disable camera controls while dragging.
+      viewer.scene.screenSpaceCameraController.enableInputs = false;
+      viewer.canvas.style.cursor = 'grabbing';
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+  handler.setInputAction(() => {
+    if (!dragEntity) return;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    viewer.canvas.style.cursor = 'default';
+    const itemId = dragEntity.properties.itemId.getValue();
+    const item = DATA.find(d => d.id === itemId);
+    dragEntity = null;
+
+    if (suppressClick && item) {
+      // After dragging: save the correction, recalculate outliers, refresh the display.
+      item.fixed = true;
+      saveGeoFix(item);
+      computeSuspects();
+      refreshTrajectoryAndStats();
+      refreshBillboardVisibility();
+      refreshTimelineSuspectBadges();
+      refreshSuspectFilterLabel();
+    }
+    // Clear suppressClick after the LEFT_CLICK event has passed.
+    setTimeout(() => { suppressClick = false; }, 100);
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+  handler.setInputAction((click) => {
+    if (suppressClick) return;
+    const picked = viewer.scene.pick(click.position);
+    if (Cesium.defined(picked) && picked.id && picked.id.properties) {
+      const itemId = picked.id.properties.itemId;
+      if (itemId !== undefined) {
+        const id = itemId.getValue();
+        openModal(id);
+        highlightTimeline(id, true);
+        return;
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  const infoPanel = document.getElementById('info-panel');
+  handler.setInputAction((movement) => {
+    // ── Update position while dragging ──
+    if (dragEntity) {
+      const dx = movement.endPosition.x - dragStartPos.x;
+      const dy = movement.endPosition.y - dragStartPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 5) suppressClick = true;
+
+      const cartesian = viewer.camera.pickEllipsoid(
+        movement.endPosition, Cesium.Ellipsoid.WGS84
+      );
+      if (Cesium.defined(cartesian)) {
+        dragEntity.position = cartesian;
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        const itemId = dragEntity.properties.itemId.getValue();
+        const item = DATA.find(d => d.id === itemId);
+        if (item) {
+          item.lat = Cesium.Math.toDegrees(carto.latitude);
+          item.lon = Cesium.Math.toDegrees(carto.longitude);
+        }
+      }
+      return;
+    }
+
+    // ── When not dragging, show hover details and a grab cursor ──
+    const picked = viewer.scene.pick(movement.endPosition);
+    if (Cesium.defined(picked) && picked.id && picked.id.properties) {
+      const itemId = picked.id.properties.itemId;
+      if (itemId !== undefined) {
+        const item = DATA.find(d => d.id === itemId.getValue());
+        if (item) {
+          viewer.canvas.style.cursor = 'grab';
+          infoPanel.innerHTML =
+            '<div class="ip-title">' + escapeHtml(item.filename) + (item.fixed ? ' <span style="color:#d29922">✎ Corrected</span>' : '') + '</div>' +
+            '<div class="ip-meta">' + formatDate(item.datetime) +
+              (item.duration ? ' · ' + formatDuration(item.duration) : '') +
+              (item.suspect ? ' · <span style="color:#f85149">⚠ Suspect GPS</span>' : '') +
+            '</div>' +
+            '<div class="ip-coord">' + item.lat.toFixed(5) + ', ' + item.lon.toFixed(5) + '</div>' +
+            '<div class="ip-hint">Hold and drag to correct location</div>';
+          infoPanel.classList.add('show');
+          return;
+        }
+      }
+    }
+    viewer.canvas.style.cursor = 'default';
+    infoPanel.classList.remove('show');
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Timeline
+// ═══════════════════════════════════════════════════════════
+
+function renderTimeline() {
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  const sorted = [...DATA].sort((a, b) => a.timestamp - b.timestamp);
+  let lastDate = '';
+  let clickTimer = null;
+  dateList = [];
+
+  sorted.forEach(item => {
+    const dt = new Date(item.timestamp * 1000);
+    const dateKey = dt.toDateString();
+    if (dateKey !== lastDate) {
+      lastDate = dateKey;
+      const sep = document.createElement('div');
+      sep.className = 'date-separator';
+      sep.dataset.date = dateKey;
+      sep.innerHTML = '<div class="day-toggle" title="Click to show or hide all photos from this day"></div>' +
+        '<div class="day">' + dt.getDate() + '</div><div class="month">' +
+        dt.toLocaleString('en-US', { month: 'short' }) + ' ' + dt.getFullYear() + '</div>';
+      sep.onclick = () => toggleDay(dateKey);
+      tl.appendChild(sep);
+      dateList.push({ key: dateKey, label: (dt.getMonth() + 1) + '/' + dt.getDate(), firstItem: item, count: 0 });
+    }
+    if (dateList.length > 0) dateList[dateList.length - 1].count++;
+
+    const div = document.createElement('div');
+    div.className = 'timeline-item';
+    if (!visibleIds.has(item.id)) div.classList.add('unchecked');
+    if (item.suspect) div.classList.add('suspect');
+    div.dataset.id = item.id;
+    div.onclick = () => {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
+      clickTimer = setTimeout(() => { flyToLocation(item.id); clickTimer = null; }, 250);
+    };
+    div.ondblclick = () => {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      flyToItem(item.id);
+    };
+
+    const isVideo = item.type === 'video';
+    let html = '<input type="checkbox" class="vis-check"' + (visibleIds.has(item.id) ? ' checked' : '') + '>';
+    if (item.thumb) {
+      html += '<img src="' + item.thumb + '">';
+    } else {
+      html += '<div class="no-thumb">' + (isVideo ? '🎬' : '📷') + '</div>';
+    }
+    if (isVideo) html += '<div class="play-icon">▶</div>';
+    if (item.suspect) html += '<div class="suspect-badge" title="Suspect GPS (filtered from map; turn off filtering or drag to correct)">⚠</div>';
+    if (item.fixed) html += '<div class="fixed-badge" title="Location corrected manually">✎</div>';
+    html += '<div class="badge ' + item.type + '">' + (isVideo ? 'VIDEO' : 'PHOTO') + '</div>';
+    if (item.duration) html += '<div class="dur-label">' + formatDuration(item.duration) + '</div>';
+    html += '<div class="time-label">' + formatTime(dt) + '</div>';
+    div.innerHTML = html;
+
+    const cb = div.querySelector('.vis-check');
+    cb.onclick = (e) => e.stopPropagation();
+    cb.onchange = (e) => toggleVisibility(item.id, e.target.checked);
+
+    tl.appendChild(div);
+  });
+
+  document.getElementById('timeline-count').textContent = sorted.length + ' items';
+
+  // Initialize visibility indicators for each date separator.
+  document.querySelectorAll('.date-separator').forEach(sep => {
+    updateDaySeparatorState(sep.dataset.date);
+  });
+
+  // Build the date list popover.
+  buildDatePanel();
+  currentJumpIndex = -1;
+}
+
+// ── Date list popover ──
+
+function buildDatePanel() {
+  const panel = document.getElementById('date-panel');
+  if (!panel) return;
+  panel.innerHTML = '';
+  dateList.forEach((d, i) => {
+    const row = document.createElement('div');
+    row.className = 'date-row';
+    row.dataset.index = i;
+    row.dataset.date = d.key;
+
+    const dot = document.createElement('span');
+    dot.className = 'vis-dot';
+    dot.title = 'Visibility status';
+
+    const label = document.createElement('span');
+    label.className = 'date-label';
+    label.textContent = d.label + ' · ' + d.count + ' items';
+
+    const eye = document.createElement('button');
+    eye.className = 'eye-btn';
+    eye.title = 'Toggle visibility for this date';
+    eye.textContent = '👁';
+    eye.onclick = (e) => {
+      e.stopPropagation();
+      toggleDay(d.key);
+    };
+
+    row.appendChild(dot);
+    row.appendChild(label);
+    row.appendChild(eye);
+
+    // Click the row to jump to its date and close the popover.
+    row.onclick = () => {
+      jumpToDate(i);
+      closeDatePanel();
+    };
+
+    panel.appendChild(row);
+  });
+  updateDatePanelStates();
+}
+
+function updateDatePanelStates() {
+  const panel = document.getElementById('date-panel');
+  if (!panel) return;
+  panel.querySelectorAll('.date-row').forEach(row => {
+    const dateKey = row.dataset.date;
+    const dayItems = DATA.filter(d => {
+      const dt = new Date(d.timestamp * 1000);
+      return dt.toDateString() === dateKey;
+    });
+    if (dayItems.length === 0) return;
+    const visibleCount = dayItems.filter(d => visibleIds.has(d.id)).length;
+    const dot = row.querySelector('.vis-dot');
+    const eye = row.querySelector('.eye-btn');
+    const all = visibleCount === dayItems.length;
+    const none = visibleCount === 0;
+    dot.classList.remove('all', 'none', 'some');
+    if (all) {
+      dot.classList.add('all');
+      eye.title = 'Click to hide this date';
+      eye.classList.remove('off');
+    } else if (none) {
+      dot.classList.add('none');
+      eye.title = 'Click to show this date';
+      eye.classList.add('off');
+    } else {
+      dot.classList.add('some');
+      eye.title = 'Partially visible; click to show all';
+      eye.classList.remove('off');
+    }
+    row.classList.toggle('current', parseInt(row.dataset.index) === currentJumpIndex);
+  });
+}
+
+function openDatePanel() {
+  const panel = document.getElementById('date-panel');
+  if (panel) panel.classList.add('open');
+}
+
+function closeDatePanel() {
+  const panel = document.getElementById('date-panel');
+  if (panel) panel.classList.remove('open');
+}
+
+// Refresh timeline ⚠/✎ markers after a dragged location correction.
+function refreshTimelineSuspectBadges() {
+  document.querySelectorAll('.timeline-item').forEach(el => {
+    const item = DATA.find(d => d.id === parseInt(el.dataset.id));
+    if (!item) return;
+    el.classList.toggle('suspect', !!item.suspect);
+    let badge = el.querySelector('.suspect-badge');
+    if (item.suspect && !badge) {
+      badge = document.createElement('div');
+      badge.className = 'suspect-badge';
+      badge.title = 'Suspect GPS (filtered from map; turn off filtering or drag to correct)';
+      badge.textContent = '⚠';
+      el.appendChild(badge);
+    } else if (!item.suspect && badge) {
+      badge.remove();
+    }
+    let fbadge = el.querySelector('.fixed-badge');
+    if (item.fixed && !fbadge) {
+      fbadge = document.createElement('div');
+      fbadge.className = 'fixed-badge';
+      fbadge.title = 'Location corrected manually';
+      fbadge.textContent = '✎';
+      el.appendChild(fbadge);
+    }
+  });
+}
+
+function refreshSuspectFilterLabel() {
+  const label = document.getElementById('suspect-filter-label');
+  if (label) {
+    label.textContent = 'Filter GPS outliers' + (suspectCount > 0 ? ' (' + suspectCount + ')' : '');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Camera flight and navigation
+// ═══════════════════════════════════════════════════════════
+
+function flyToItem(id) {
+  const item = DATA.find(d => d.id === id);
+  if (!item || !item.lat || !item.lon) return;
+
+  const h = viewer.camera.positionCartographic.height;
+  const flyHeight = Math.round(Math.max(500, Math.min(50000, h)));
+  cameraHeight = flyHeight;
+
+  const offset = 0.01 * (flyHeight / 6000);
+  isFlying = true;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(item.lon, item.lat - offset, flyHeight),
+    orientation: {
+      heading: 0,
+      pitch: Cesium.Math.toRadians(-80),
+      roll: 0,
+    },
+    duration: 1.5,
+    complete: () => { isFlying = false; },
+    cancel: () => { isFlying = false; },
+  });
+
+  highlightTimeline(id, true);
+  openModal(id);
+}
+
+function flyToLocation(id) {
+  const item = DATA.find(d => d.id === id);
+  if (!item || !item.lat || !item.lon) return;
+
+  const h = viewer.camera.positionCartographic.height;
+  const flyHeight = Math.round(Math.max(500, Math.min(50000, h)));
+  cameraHeight = flyHeight;
+
+  const offset = 0.01 * (flyHeight / 6000);
+  isFlying = true;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(item.lon, item.lat - offset, flyHeight),
+    orientation: {
+      heading: 0,
+      pitch: Cesium.Math.toRadians(-80),
+      roll: 0,
+    },
+    duration: 1.5,
+    complete: () => { isFlying = false; },
+    cancel: () => { isFlying = false; },
+  });
+  highlightTimeline(id, true);
+}
+
+function highlightTimeline(id, scroll) {
+  document.querySelectorAll('.timeline-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.id) === id);
+  });
+  if (scroll) {
+    const el = document.querySelector('.timeline-item[data-id="' + id + '"]');
+    if (el) {
+      const tl = document.getElementById('timeline');
+      const tlRect = tl.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      // Calculate the horizontal offset needed to center the target element.
+      const offset = (elRect.left + elRect.width / 2) - (tlRect.left + tlRect.width / 2);
+      tl.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  }
+}
+
+function jumpToDate(index) {
+  if (index < 0 || index >= dateList.length) return;
+  currentJumpIndex = index;
+  const d = dateList[index];
+
+  // Update the date-list button and highlighted row.
+  const listBtn = document.getElementById('date-list-btn');
+  if (listBtn) listBtn.textContent = d.label + ' (' + d.count + ' items) ▾';
+
+  // Update the previous/next button states.
+  const btnPrev = document.getElementById('date-prev');
+  const btnNext = document.getElementById('date-next');
+  if (btnPrev) btnPrev.disabled = (index <= 0);
+  if (btnNext) btnNext.disabled = (index >= dateList.length - 1);
+
+  // Fly the camera and scroll the timeline (flyToLocation highlights and centers the photo).
+  const firstItem = d.firstItem;
+  if (firstItem && firstItem.lat && firstItem.lon) {
+    flyToLocation(firstItem.id);
+  } else {
+    // If the first photo lacks coordinates, scroll to its date separator instead.
+    const sep = document.querySelector('.date-separator[data-date="' + d.key + '"]');
+    if (sep) {
+      const tl = document.getElementById('timeline');
+      const tlRect = tl.getBoundingClientRect();
+      const sepRect = sep.getBoundingClientRect();
+      const offset = (sepRect.left + sepRect.width / 2) - (tlRect.left + tlRect.width / 2);
+      tl.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  }
+
+  updateDateToggleState();
+  updateDatePanelStates();
+  // Redraw only this day's route.
+  refreshTrajectoryAndStats();
+}
+
+function updateDateToggleState() {
+  const btn = document.getElementById('date-toggle-vis');
+  if (!btn || currentJumpIndex < 0 || currentJumpIndex >= dateList.length) return;
+  const d = dateList[currentJumpIndex];
+  const dayItems = DATA.filter(item => {
+    const dt = new Date(item.timestamp * 1000);
+    return dt.toDateString() === d.key;
+  });
+  if (dayItems.length === 0) return;
+  const visibleCount = dayItems.filter(item => visibleIds.has(item.id)).length;
+  btn.classList.remove('all-visible', 'none-visible', 'some-visible');
+  if (visibleCount === dayItems.length) {
+    btn.classList.add('all-visible');
+    btn.title = 'All photos visible; click to hide';
+  } else if (visibleCount === 0) {
+    btn.classList.add('none-visible');
+    btn.title = 'All photos hidden; click to show';
+  } else {
+    btn.classList.add('some-visible');
+    btn.title = 'Some photos visible; click to show all';
+  }
+}
+
+function toggleVisibility(id, checked) {
+  if (checked) {
+    visibleIds.add(id);
+  } else {
+    visibleIds.delete(id);
+  }
+  billboardEntities.forEach(entity => {
+    const itemId = entity.properties.itemId.getValue();
+    if (itemId === id) {
+      const item = DATA.find(d => d.id === itemId);
+      if (item) {
+        entity.show = isShownOnMap(item) && (currentFilter === 'all' || item.type === currentFilter);
+      }
+    }
+  });
+  const tlItem = document.querySelector('.timeline-item[data-id="' + id + '"]');
+  if (tlItem) tlItem.classList.toggle('unchecked', !checked);
+  // Update the separator state for this item's date.
+  const changedItem = DATA.find(d => d.id === id);
+  if (changedItem) {
+    const dt = new Date(changedItem.timestamp * 1000);
+    updateDaySeparatorState(dt.toDateString());
+    updateDateToggleState();
+  }
+  refreshTrajectoryAndStats();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Toggle visibility for an entire day.
+// ═══════════════════════════════════════════════════════════
+
+function toggleDay(dateKey) {
+  const dayItems = DATA.filter(d => {
+    const dt = new Date(d.timestamp * 1000);
+    return dt.toDateString() === dateKey;
+  });
+  if (dayItems.length === 0) return;
+
+  // Hide all if currently all visible; otherwise show all.
+  const allVisible = dayItems.every(d => visibleIds.has(d.id));
+
+  dayItems.forEach(d => {
+    if (allVisible) {
+      visibleIds.delete(d.id);
+    } else {
+      visibleIds.add(d.id);
+    }
+  });
+
+  // Update map markers.
+  billboardEntities.forEach(entity => {
+    const itemId = entity.properties.itemId.getValue();
+    const item = DATA.find(d => d.id === itemId);
+    if (item) {
+      const dt = new Date(item.timestamp * 1000);
+      if (dt.toDateString() === dateKey) {
+        entity.show = isShownOnMap(item) && (currentFilter === 'all' || item.type === currentFilter);
+      }
+    }
+  });
+
+  // Update timeline checkboxes and appearance.
+  dayItems.forEach(d => {
+    const tlItem = document.querySelector('.timeline-item[data-id="' + d.id + '"]');
+    if (tlItem) {
+      tlItem.classList.toggle('unchecked', !visibleIds.has(d.id));
+      const cb = tlItem.querySelector('.vis-check');
+      if (cb) cb.checked = visibleIds.has(d.id);
+    }
+  });
+
+  updateDaySeparatorState(dateKey);
+  updateDateToggleState();
+  updateDatePanelStates();
+
+  // Redraw the route.
+  refreshTrajectoryAndStats();
+}
+
+function updateDaySeparatorState(dateKey) {
+  const sep = document.querySelector('.date-separator[data-date="' + dateKey + '"]');
+  if (!sep) return;
+  const dayItems = DATA.filter(d => {
+    const dt = new Date(d.timestamp * 1000);
+    return dt.toDateString() === dateKey;
+  });
+  if (dayItems.length === 0) return;
+  const visibleCount = dayItems.filter(d => visibleIds.has(d.id)).length;
+  sep.classList.remove('all-visible', 'none-visible', 'some-visible');
+  if (visibleCount === dayItems.length) {
+    sep.classList.add('all-visible');
+  } else if (visibleCount === 0) {
+    sep.classList.add('none-visible');
+  } else {
+    sep.classList.add('some-visible');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Full-size modal
+// ═══════════════════════════════════════════════════════════
+
+function openModal(id) {
+  modalIndex = DATA.findIndex(d => d.id === id);
+  if (modalIndex === -1) return;
+  showModal();
+  document.getElementById('modal').classList.add('show');
+}
+
+function showModal() {
+  const item = DATA[modalIndex];
+  if (!item) return;
+  const media = document.getElementById('modal-media');
+  const info = document.getElementById('modal-info');
+
+  if (item.type === 'video') {
+    media.innerHTML = '<video controls autoplay src="' + item.src + '">' +
+      '<div class="fallback">Unable to play video.<br><a href="' + item.src + '">Open the file directly</a></div></video>';
+  } else {
+    media.innerHTML = '<img src="' + item.src + '" onerror="this.onerror=null;this.src=\'' + (item.thumb || '') + '\';this.style.maxWidth=\'300px\'">';
+  }
+
+  let metaParts = [formatDate(item.datetime)];
+  if (item.lat) metaParts.push(item.lat.toFixed(5) + ', ' + item.lon.toFixed(5));
+  if (item.duration) metaParts.push('Duration ' + formatDuration(item.duration));
+  info.innerHTML = '<div class="filename">' + escapeHtml(item.filename) + '</div><div class="meta">' + metaParts.join(' · ') + '</div>';
+
+  highlightTimeline(item.id, true);
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+  document.getElementById('modal-media').innerHTML = '';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Event handlers
+// ═══════════════════════════════════════════════════════════
+
+function setupEvents() {
+  // ── Date navigation controls ──
+  document.getElementById('date-list-btn').onclick = (e) => {
+    e.stopPropagation();
+    const panel = document.getElementById('date-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) updateDatePanelStates();
+  };
+  // Close the popover when clicking outside it.
+  document.addEventListener('click', (e) => {
+    const panel = document.getElementById('date-panel');
+    if (panel.classList.contains('open') && !panel.contains(e.target)) {
+      closeDatePanel();
+    }
+  });
+  document.getElementById('date-prev').onclick = () => {
+    const idx = currentJumpIndex < 0 ? 0 : Math.max(0, currentJumpIndex - 1);
+    jumpToDate(idx);
+  };
+  document.getElementById('date-next').onclick = () => {
+    const idx = currentJumpIndex < 0 ? 0 : Math.min(dateList.length - 1, currentJumpIndex + 1);
+    jumpToDate(idx);
+  };
+  document.getElementById('date-toggle-vis').onclick = () => {
+    if (currentJumpIndex < 0 || currentJumpIndex >= dateList.length) return;
+    toggleDay(dateList[currentJumpIndex].key);
+  };
+
+  // ── GPS outlier filter ──
+  document.getElementById('suspect-filter').onchange = (e) => {
+    filterSuspects = e.target.checked;
+    refreshBillboardVisibility();
+    refreshTrajectoryAndStats();
+  };
+
+  document.getElementById('modal-close').onclick = closeModal;
+  document.getElementById('modal-prev').onclick = () => {
+    modalIndex = (modalIndex - 1 + DATA.length) % DATA.length;
+    showModal();
+  };
+  document.getElementById('modal-next').onclick = () => {
+    modalIndex = (modalIndex + 1) % DATA.length;
+    showModal();
+  };
+  document.addEventListener('keydown', e => {
+    const m = document.getElementById('modal');
+    if (!m.classList.contains('show')) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); document.getElementById('modal-prev').onclick(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); document.getElementById('modal-next').onclick(); }
+    else if (e.key === 'Escape') closeModal();
+  });
+  document.getElementById('modal').onclick = e => {
+    if (e.target.id === 'modal') closeModal();
+  };
+
+  document.getElementById('filter-type').onchange = e => {
+    currentFilter = e.target.value;
+    refreshBillboardVisibility();
+  };
+
+  document.getElementById('toggle-path').onchange = e => {
+    const show = e.target.checked;
+    trajectoryEntities.forEach(entity => { entity.show = show; });
+    startEndEntities.forEach(entity => { entity.show = show; });
+  };
+
+  document.getElementById('btn-2d').onclick = () => {
+    if (is3D) {
+      viewer.scene.morphTo2D(1.0);
+      is3D = false;
+    } else {
+      viewer.scene.morphTo3D(1.0);
+      is3D = true;
+    }
+  };
+
+  document.getElementById('map-style-select').onchange = e => {
+    setMapStyle(e.target.value);
+  };
+
+  document.getElementById('btn-fit').onclick = () => {
+    viewer.flyTo(viewer.entities, { duration: 1.5 });
+  };
+
+  const zoomRange = document.getElementById('zoom-range');
+  const zoomVal = document.getElementById('zoom-val');
+  zoomRange.oninput = () => {
+    cameraHeight = parseInt(zoomRange.value);
+    zoomVal.textContent = formatHeight(cameraHeight);
+  };
+  zoomVal.textContent = formatHeight(cameraHeight);
+
+  // ── Timeline: horizontal wheel and drag scrolling ──
+  const tl = document.getElementById('timeline');
+
+  // Convert vertical wheel movement to horizontal scrolling.
+  tl.addEventListener('wheel', (e) => {
+    if (e.deltaY === 0) return;
+    e.preventDefault();
+    tl.scrollLeft += e.deltaY;
+  }, { passive: false });
+
+  // Scroll by holding and dragging the mouse horizontally.
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartScroll = 0;
+  let dragMoved = false;
+
+  tl.addEventListener('mousedown', (e) => {
+    // Do not start dragging from a checkbox.
+    if (e.target.classList.contains('vis-check')) return;
+    isDragging = true;
+    dragMoved = false;
+    dragStartX = e.pageX;
+    dragStartScroll = tl.scrollLeft;
+    // Do not add the dragging class here; pointer-events:none would block clicks.
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.pageX - dragStartX;
+    if (Math.abs(dx) > 5) {
+      dragMoved = true;
+      tl.classList.add('dragging'); // Disable child pointer events only during a real drag.
+    }
+    tl.scrollLeft = dragStartScroll - dx;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      tl.classList.remove('dragging');
+      // Reset dragMoved later so the click capture handler can intercept it.
+      setTimeout(() => { dragMoved = false; }, 0);
+    }
+  });
+
+  // Intercept accidental post-drag clicks during capture, before item onclick.
+  tl.addEventListener('click', (e) => {
+    if (dragMoved) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Statistics and utilities
+// ═══════════════════════════════════════════════════════════
+
+function updateStats(distanceKm) {
+  const photos = DATA.filter(d => d.type === 'photo').length;
+  const videos = DATA.filter(d => d.type === 'video').length;
+  const locations = DATA.filter(d => d.lat && d.lon).length;
+  let parts = ['📷 ' + photos + ' photos', '🎬 ' + videos + ' videos', '📍 ' + locations + ' locations'];
+  if (distanceKm && distanceKm > 0) {
+    parts.push('🛣️ ' + (distanceKm < 1 ? (distanceKm * 1000).toFixed(0) + 'm' : distanceKm.toFixed(1) + 'km'));
+  }
+  document.getElementById('stats').textContent = parts.join(' · ');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function formatHeight(m) {
+  if (m >= 1000) return (m / 1000).toFixed(1) + 'km';
+  return m + 'm';
+}
+
+function formatDate(dtStr) {
+  if (!dtStr) return '';
+  const dt = new Date(dtStr.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'));
+  if (isNaN(dt)) return dtStr;
+  return dt.getFullYear() + '-' +
+    String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getDate()).padStart(2, '0') + ' ' +
+    String(dt.getHours()).padStart(2, '0') + ':' +
+    String(dt.getMinutes()).padStart(2, '0');
+}
+
+function formatTime(dt) {
+  return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Main entry point
+// ═══════════════════════════════════════════════════════════
+
+function init() {
+  const valid = DATA.filter(d => d.lat && d.lon);
+  if (valid.length === 0) {
+    document.getElementById('loading').innerHTML = '<div class="text">⚠️ No photos or videos with GPS information were found</div>';
+    return;
+  }
+
+  // Apply saved location corrections from localStorage, then find GPS outliers.
+  loadGeoFixes();
+  computeSuspects();
+
+  initCesium();
+  visibleIds = new Set(DATA.map(d => d.id));
+
+  // Create billboards for every photo; show controls visibility, including outliers.
+  addBillboards([...DATA].sort((a, b) => a.timestamp - b.timestamp));
+  renderTimeline();
+  setupInteraction();
+  setupEvents();
+  refreshSuspectFilterLabel();
+
+  // Select the first day by default, draw its route, and update the UI.
+  if (dateList.length > 0) {
+    currentJumpIndex = 0;
+    const d0 = dateList[0];
+    const listBtn = document.getElementById('date-list-btn');
+    if (listBtn) listBtn.textContent = d0.label + ' (' + d0.count + ' items) ▾';
+    const btnPrev = document.getElementById('date-prev');
+    if (btnPrev) btnPrev.disabled = true;
+    updateDateToggleState();
+    updateDatePanelStates();
+    refreshTrajectoryAndStats();
+  }
+
+  isFlying = true;
+  viewer.zoomTo(viewer.entities).then(() => {
+    const center = viewer.camera.positionCartographic;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromRadians(
+        center.longitude, center.latitude, center.height * 1.5
+      ),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0,
+      },
+      duration: 1.5,
+      complete: () => { isFlying = false; },
+      cancel: () => { isFlying = false; },
+    });
+  });
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.visibility = 'visible';
+}
+
+// Detect a Cesium loading timeout.
+setTimeout(() => {
+  if (typeof Cesium === 'undefined') {
+    document.getElementById('loading').innerHTML =
+      '<div class="text">⚠️ Cesium 3D timed out while loading<br>Check your connection and refresh the page</div>';
+  }
+}, 20000);
+
+// Load data and start the map.
+fetch('photos.json')
+  .then(r => r.json())
+  .then(data => {
+    DATA = data;
+    if (typeof Cesium !== 'undefined') {
+      init();
+    } else {
+      const checkInterval = setInterval(() => {
+        if (typeof Cesium !== 'undefined') {
+          clearInterval(checkInterval);
+          init();
+        }
+      }, 100);
+    }
+  })
+  .catch(err => {
+    document.getElementById('loading').innerHTML =
+      '<div class="text">⚠️ Unable to load photos.json<br>' + err.message + '</div>';
+  });
+</script>
+</body>
+</html>

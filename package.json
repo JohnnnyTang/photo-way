@@ -1,0 +1,12 @@
+{
+  "name": "photo-way",
+  "private": true,
+  "license": "MIT",
+  "workspaces": ["viewer", "app"],
+  "scripts": {
+    "build:viewer": "npm run build -w viewer",
+    "dev:viewer": "npm run dev -w viewer",
+    "fixtures": "node scripts/gen-sample-data.mjs",
+    "check": "npm run typecheck -w viewer && npm run build -w viewer"
+  }
+}
