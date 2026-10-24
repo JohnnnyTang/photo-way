@@ -1,36 +1,41 @@
-// Viewer entry. Wave 0 placeholder: proves the build/embed pipeline; Wave 1 · C replaces the UI.
+// Viewer entry: exposes `PhotoWay.mount` (DATA_CONTRACT 3) and auto-mounts on DOMContentLoaded.
 import "./style.css";
-import { findProject, resolveRef } from "./data";
+import { App, type MountOptions } from "./app";
+import { findProject } from "./data";
 import type { Project } from "./model";
+import { T } from "./strings";
 
-export interface MountOptions {
-  mode?: "export" | "preview";
-  resolveRef?: (ref: string) => string;
+export type { MountOptions } from "./app";
+export type { Project } from "./model";
+
+export interface PhotoWayHandle {
+  destroy(): void;
+  setProject(p: Project): void;
+  /** Diagnostics for tests and tooling; not part of the stable contract. */
+  stats(): ReturnType<App["stats"]>;
 }
 
-export function mount(el: HTMLElement, project: Project, opts: MountOptions = {}) {
-  const resolve = opts.resolveRef ?? ((r: string) => resolveRef(r));
-  const render = (p: Project) => {
-    el.innerHTML = "";
-    const h = document.createElement("h1");
-    h.textContent = `${p.title} — ${p.items.length} items`;
-    const grid = document.createElement("div");
-    grid.className = "pw-grid";
-    for (const item of p.items.slice(0, 60)) {
-      const img = document.createElement("img");
-      img.loading = "lazy";
-      img.alt = item.name;
-      img.src = resolve(item.thumb);
-      grid.append(img);
-    }
-    el.append(h, grid);
+export function mount(el: HTMLElement, project: Project, opts: MountOptions = {}): PhotoWayHandle {
+  const app = new App(el, project, { mode: "export", ...opts });
+  return {
+    destroy: () => app.destroy(),
+    setProject: (p) => app.setProject(p),
+    stats: () => app.stats(),
   };
-  render(project);
-  return { destroy: () => (el.innerHTML = ""), setProject: render };
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function autoMount(): void {
   const el = document.getElementById("photoway");
+  if (!el) return;
   const project = findProject();
-  if (el && project) mount(el, project, { mode: "export" });
-});
+  if (!project) {
+    el.textContent = T.loadError;
+    return;
+  }
+  (window as unknown as { __photoway__?: PhotoWayHandle }).__photoway__ = mount(el, project, { mode: "export" });
+}
+
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", autoMount);
+  else autoMount();
+}

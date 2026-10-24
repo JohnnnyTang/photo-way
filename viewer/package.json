@@ -7,14 +7,23 @@
     "dev": "vite",
     "build": "vite build && node scripts/copy-template.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "npm run build && node ../scripts/gen-sample-data.mjs && node scripts/make-test-pages.mjs && playwright test"
   },
   "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.4.4",
+    "@playwright/test": "^1.64.1",
+    "@types/geojson": "^7946.0.16",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "happy-dom": "^21.0.4",
+    "mapshaper": "0.7.98",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
   },
   "dependencies": {
-    "maplibre-gl": "^6.15.0"
+    "maplibre-gl": "6.15.0",
+    "topojson-client": "^3.1.0"
   }
 }
