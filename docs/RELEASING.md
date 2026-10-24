@@ -30,7 +30,7 @@ forward with the next patch version.
 | Asset | Notes |
 |---|---|
 | `Photo-Way_X.Y.Z_x64-setup.exe` | NSIS, per-user install, no admin |
-| `Photo-Way_X.Y.Z_x64_en-US.msi` | per-machine install |
+| `Photo-Way_X.Y.Z_x64_en-US.msi` | registers machine-wide, files under %LOCALAPPDATA% (see WAVE3_GATE.md) |
 | `Photo-Way_X.Y.Z_universal.dmg` | arm64 + x86_64 |
 | `photoway-cli-X.Y.Z-windows-x64.zip`, `photoway-cli-X.Y.Z-macos-universal.tar.gz` | CLI plus LICENSE and notices |
 | `third-party-sources-X.Y.Z.tar.gz` | LGPL corresponding source (libheif, libde265) |
