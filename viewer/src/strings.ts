@@ -10,6 +10,7 @@ export const T = {
     days: (n: number) => `${n} ${n === 1 ? "day" : "days"}`,
     shown: (n: number, total: number) => `${n.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} shown`,
     outliers: (n: number) => `${n} GPS ${n === 1 ? "outlier" : "outliers"}`,
+    elevation: (gain: number, loss: number) => `↑ ${gain.toLocaleString("en-US")} m ↓ ${loss.toLocaleString("en-US")} m`,
   },
 
   toolbar: {

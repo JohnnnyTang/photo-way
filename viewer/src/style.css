@@ -368,3 +368,4 @@ img.pw-modal-media { flex: 0 1 auto; }
 @media (prefers-reduced-motion: reduce) {
   .pw-root * { transition: none !important; }
 }
+.pw-daystat:empty { display: none; }
