@@ -8,3 +8,4 @@ app/src-tauri/gen/schemas/
 Thumbs.db
 /out/
 .claude/
+/.vcpkg/

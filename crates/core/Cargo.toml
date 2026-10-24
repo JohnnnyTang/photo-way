@@ -13,3 +13,23 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
+
+# Wave 1 · B (media)
+rayon = "1"
+fast_image_resize = "6.1"
+jpeg-encoder = "0.7"
+blake3 = "1"
+libheif-rs = { version = "3.0.0", optional = true, default-features = false, features = ["v1_17"] }
+
+[features]
+default = ["heic"]
+# HEIC/HEIF decoding through libheif (static, built by scripts/setup-libheif.*).
+# `--no-default-features` builds without any C dependency.
+heic = ["dep:libheif-rs"]
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bench]]
+name = "media"
+harness = false

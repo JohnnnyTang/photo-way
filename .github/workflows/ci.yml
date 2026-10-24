@@ -50,6 +50,21 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      # libheif + libde265 (static) via vcpkg; the script exports the cargo env to GITHUB_ENV.
+      - uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/vcpkg-bin
+          key: vcpkg-${{ runner.os }}-2026.10.16-${{ hashFiles('vcpkg/triplets/*') }}
+      - name: Build libheif (vcpkg)
+        shell: bash
+        env:
+          VCPKG_BINARY_SOURCES: clear;files,${{ runner.temp }}/vcpkg-bin,readwrite
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            pwsh -File scripts/setup-libheif.ps1
+          else
+            scripts/setup-libheif.sh
+          fi
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
