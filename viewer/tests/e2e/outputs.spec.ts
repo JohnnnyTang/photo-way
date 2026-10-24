@@ -19,6 +19,9 @@ for (const output of outputs) {
       };
 
       test("counts, timeline virtualization and zero console errors", async ({ page, manifest, servers, errors }) => {
+        const responses: string[] = [];
+        page.on("response", (r) => { if (r.status() >= 400 || !r.ok()) responses.push(`${r.status()} ${r.url().slice(-40)}`); });
+        page.on("requestfailed", (r) => responses.push(`FAILED ${r.url().slice(-40)} ${r.failure()?.errorText}`));
         await open(page, manifest, servers);
         const project = await projectOf(page);
         const total = project.items.length;
@@ -48,14 +51,15 @@ for (const output of outputs) {
           .poll(() => page.locator(".pw-tl-item").evaluateAll((els) => Math.max(...els.map((e) => Number((e as HTMLElement).dataset.id)))))
           .toBe(total - 1);
 
-        // Visible thumbnails resolve (pack refs, relative URLs, or served files).
-        await expect
-          .poll(() => page.locator(".pw-tl-item img").evaluateAll((all) => {
-            // Off-screen rows are lazy (loading="lazy") and may not have loaded; check what is on screen.
+        // Visible thumbnails resolve (pack refs, relative URLs, or served files). Off-screen rows are lazy
+        // (loading="lazy") and may not have loaded, so only what is on screen is checked.
+        const badImages = () =>
+          page.locator(".pw-tl-item img").evaluateAll((all) => {
             const imgs = (all as HTMLImageElement[]).filter((i) => { const r = i.getBoundingClientRect(); return r.right > 0 && r.left < innerWidth; });
-            return imgs.length > 0 && imgs.every((i) => i.complete && i.naturalWidth > 0);
-          }))
-          .toBe(true);
+            if (imgs.length === 0) return ["no visible thumbnails"];
+            return imgs.filter((i) => !(i.complete && i.naturalWidth > 0)).map((i) => `${i.src.slice(0, 80)} complete=${i.complete} width=${i.naturalWidth}`);
+          });
+        await expect.poll(badImages, { message: `thumbnails (responses: ${JSON.stringify(responses)})` }).toEqual([]);
         expect(errors).toEqual([]);
       });
 
