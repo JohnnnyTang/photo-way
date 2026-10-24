@@ -38,7 +38,7 @@ for (const output of outputs) {
         // Timeline is virtualized: the first row is rendered, the DOM stays bounded, and scrolling to the end
         // reaches the last item of the data.
         await expect(page.locator(".pw-tl-item").first()).toBeVisible();
-        expect(s.timelineNodes).toBeLessThanOrEqual(Math.min(total, 150));
+        expect(s.timelineNodes).toBeLessThanOrEqual(Math.min(total + 12, 150)); // rows include day headers
         const scroller = page.locator(".pw-tl-scroller");
         if (total > 40) {
           expect(await scroller.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);

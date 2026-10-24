@@ -45,7 +45,7 @@ jobs:
         run: node scripts/check-size.mjs --only viewer,basemap --require
       - name: Install Playwright browsers
         if: hashFiles('viewer/playwright.config.*') != ''
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install --with-deps chromium webkit firefox
       - name: End-to-end (Playwright, file://)
         if: hashFiles('viewer/playwright.config.*') != ''
         run: npm run test:e2e -w viewer --if-present
@@ -141,9 +141,8 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      # TODO(Wave 2 · E): set this to "1" once the photoway CLI (build/serve/bundle writers) has merged, so the suite
-      # can no longer fall back to the viewer reference layouts. Until then the fallback keeps main green.
-      PW_E2E_REQUIRE_CLI: ""
+      # The suite must use the real photoway CLI here (no fallback to the viewer reference layouts).
+      PW_E2E_REQUIRE_CLI: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -171,8 +170,7 @@ jobs:
         run: npx playwright install --with-deps chromium firefox webkit
         working-directory: viewer
       - name: End-to-end outputs, perf and size (Playwright)
-        run: npx playwright test
-        working-directory: viewer
+        run: npm run test:e2e -w viewer
       - name: Output size budgets
         shell: bash
         run: |

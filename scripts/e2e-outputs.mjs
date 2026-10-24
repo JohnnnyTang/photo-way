@@ -9,7 +9,7 @@
 //   manifest.json               { source: "cli" | "fallback", ... } read by viewer/tests/e2e
 //
 // Source of the outputs:
-//   cli       `photoway build` (DATA_CONTRACT section 7) on crates/core/tests/data. Binary: PW_CLI, else
+//   cli       `photoway build` (DATA_CONTRACT section 7) on the 12 geotagged JPEGs of scripts/gen-e2e-inputs.mjs. Binary: PW_CLI, else
 //             target/release/photoway[.exe]. Selected only when a probe build works.
 //   fallback  the reference layouts of viewer/scripts/make-test-pages.mjs on fixtures/sample (295 items),
 //             used while the CLI is missing or still prints "not implemented".
@@ -22,6 +22,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { inflateRawSync } from "node:zlib";
+import { writeInputs } from "./gen-e2e-inputs.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const exe = process.platform === "win32" ? ".exe" : "";
@@ -102,7 +103,7 @@ function probeCli() {
   const probeDir = join(root, "target", "e2e-outputs", "probe");
   rmSync(probeDir, { recursive: true, force: true });
   mkdirSync(probeDir, { recursive: true });
-  const r = runCli(cli, ["build", join(root, "crates", "core", "tests", "data"), "-o", join(probeDir, "probe.html")]);
+  const r = runCli(cli, ["build", writeInputs().dir, "-o", join(probeDir, "probe.html")]);
   if (r.status === 0 && existsSync(join(probeDir, "probe.html"))) return { cli, reason: "" };
   const msg = `${r.error?.message ?? ""}${r.stderr ?? ""}`.trim().split("\n")[0] || `exit ${r.status}`;
   return { cli: null, reason: `${cli} cannot build: ${msg}` };
@@ -152,7 +153,7 @@ export async function prepareOutputs({ out = join(root, "target", "e2e-outputs",
   const manifest = { source: cli ? "cli" : "fallback", cli, note: reason, outputs: {} };
   if (cli) {
     log(`source = CLI (${cli})`);
-    const input = join(root, "crates", "core", "tests", "data");
+    const input = writeInputs().dir;
     const common = ["--title", "E2E fixture", "--basemap", "offline", "--theme", "auto"];
     const build = (format, target) => {
       const r = runCli(cli, ["build", input, "-o", target, "--format", format, ...common]);
