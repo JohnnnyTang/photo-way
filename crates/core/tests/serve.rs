@@ -5,7 +5,7 @@ mod export_support;
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use export_support::{Fixture, fixture};
 use photoway_core::bundle::{self, Format};
@@ -218,12 +218,12 @@ fn stop_and_drop_release_the_port() {
     let addr = h.addr;
     assert_eq!(get(addr, "/").status, 200);
     h.stop();
-    assert!(TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_err());
+    assert!(port_closes(addr));
 
     let h = serve::serve(&out, any_port()).unwrap();
     let addr = h.addr;
     drop(h);
-    assert!(TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_err());
+    assert!(port_closes(addr));
 }
 
 #[test]
@@ -256,4 +256,17 @@ fn bad_inputs_are_errors() {
     let out = export(&f, Format::Html, "page.html");
     let first = serve::serve(&out, any_port()).unwrap();
     assert!(serve::serve(&out, first.addr).is_err(), "port in use");
+}
+
+/// tiny_http closes its listener on its own accept thread after the server is dropped, so the
+/// port stops accepting shortly after `stop()`/drop return rather than at the same instant.
+fn port_closes(addr: SocketAddr) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_err() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    false
 }
