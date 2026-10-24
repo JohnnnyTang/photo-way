@@ -20,6 +20,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node scripts/check-text.mjs
       - run: npm run fixtures
       - run: npm run typecheck -w viewer
       - run: npm run build -w viewer

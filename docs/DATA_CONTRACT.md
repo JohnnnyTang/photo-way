@@ -44,7 +44,7 @@ Rust mirror: `crates/core/src/model.rs`. TS mirror: `viewer/src/model.ts`.
 | `thumb` | Ref | Required. Square JPEG, 256 px, orientation applied. |
 | `full` | Ref \| null | Large still (web-sized or original). Null when the export option is "none". |
 | `video` | Ref \| null | Motion file for `video` / `live`. Null when not exported. |
-| `flags` | string[] | Optional. Known: `"corrected"` (location manually corrected), `"inferredLocation"`, `"noTime"`. Unknown flags must be ignored. |
+| `flags` | string[] | Optional. Known: `"corrected"` (location manually corrected), `"hidden"` (hidden by the user; kept in a saved copy only when the user chooses to keep hidden items), `"inferredLocation"`, `"noTime"`. Unknown flags must be ignored. |
 
 ### 1.2 Ref
 
@@ -52,6 +52,9 @@ A `Ref` is a string, one of:
 
 - **Relative URL** (bundle mode): `thumbs/00012.jpg`, `media/00012-IMG_0001.jpg`. Path segments are URL-encoded; always `/`; never absolute, never `..`.
 - **Pack ref** (single-HTML mode): `#pack:<pack>:<offset>:<length>` — bytes `[offset, offset+length)` of the decoded pack `<pack>` (see §2.1). The MIME type is implied by the field: `thumb`/`full` = `image/jpeg`, `video` = per pack `data-mime` (v1 never packs video).
+
+Viewers decode only the base64 characters covering the requested bytes (`floor(offset/3)*4` … `ceil((offset+length)/3)*4`),
+so packs are never decoded whole; this is why pack text must contain no whitespace.
 
 Viewers resolve refs through a single `resolveRef(ref): string` function returning a usable URL (relative URL as-is, pack refs → lazily created `blob:` URL).
 
@@ -78,9 +81,12 @@ One file, no external requests except optional online map tiles.
 
 Escaping rules (the writer **must** apply them):
 - `{TITLE}`: HTML-escaped (`& < > " '`).
-- `{PROJECT_JSON}`: JSON with every `<` written as `<` (prevents `</script>`/`<!--`), plus ` `/` ` escaped.
+- `{PROJECT_JSON}`: JSON with every `<` written as `\u003c` (prevents `</script>`/`<!--`), plus U+2028/U+2029 written as `\u2028`/`\u2029`.
 - `{viewer.js}` / `{viewer.css}`: every `</script` / `</style` (case-insensitive) replaced with `<\/script` / `<\/style`.
-- Packs: standard base64, no line breaks.
+- Packs: standard base64, no line breaks or other whitespace.
+
+`viewer.js` is self-contained: it embeds the MapLibre worker (as a string, started as a classic `blob:` worker)
+and the offline basemap (TopoJSON, ~0.6 MB). Templates never use `type="module"`, `fetch()` or `new Worker(<file URL>)`.
 
 ### 2.2 Bundle (`Format::Dir`, `Format::Zip`)
 
@@ -132,6 +138,12 @@ Auto-mount: on `DOMContentLoaded`, if `#photoway` exists and data is found in `#
 
 All storage access is wrapped in try/catch; the viewer must work when storage is unavailable.
 
+Storage scope (measured in spike S2): on `file://`, Chrome, Edge, Firefox and WebKit give **every local HTML file one
+shared localStorage**, persistent across reloads and restarts; over HTTP it is per origin *including the port*.
+Hence: `project.id` must be a random UUID v4; never enumerate or clear keys you do not own; keep values small
+(all exported trips share one ~5 MB quota on file://); values carry `"v": 1`; `photoway:prefs` is intentionally
+shared by all trips; stored corrections are readable by any other local page (mention in the privacy note).
+
 **Corrections export** (`corrections.json`, importable by app/CLI):
 ```json
 { "format": "photoway-corrections", "version": 1, "projectId": "…",
@@ -139,7 +151,13 @@ All storage access is wrapped in try/catch; the viewer must work when storage is
   "hidden": [ 7, 8 ] }
 ```
 
-**Save a copy** (single HTML only): the viewer rewrites the `pw-data` script with edits applied (`lat/lon` replaced, `"corrected"` flag added, hidden items removed or kept per user choice) and downloads `document` as a new `.html`.
+**Save a copy** (single HTML only), run synchronously from a click handler: clone `document.documentElement`,
+empty `#photoway`, drop runtime-only attributes (e.g. `data-theme`), replace the text of `#pw-data` with the edited
+project (escaped as in §2.1) and download `"<!doctype html>\n" + outerHTML` as `text/html`. Edits are baked in
+(`lat/lon` replaced + `"corrected"` flag; hidden items removed, or kept with the `"hidden"` flag, per user choice).
+The copy gets a **new `id`** (fresh UUID v4) and `createdAt`; items are renumbered so that `id` equals index again.
+Because the id is new, the original's stored edits are never re-applied to the copy (they are keyed by item id and
+would point at the wrong items after renumbering).
 
 ## 5. Themes
 
