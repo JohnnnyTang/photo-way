@@ -2,16 +2,18 @@ import { BASEMAPS, resolveBasemap, type BasemapId } from "./basemap";
 import { buildRows, dayKeyOf, groupByDay, NO_DAY, sortByTime, type DayGroup } from "./days";
 import { createResolver, domPackReader, hasInlineData, type RefResolver } from "./data";
 import { h, icon, ICONS } from "./dom";
-import { MapView } from "./mapview";
+import { DEFAULT_LOOK, MapView, routeRamp, type RouteContext, type RouteLook } from "./mapview";
 import { Modal } from "./modal";
 import type { Item, Kind, Project, Theme } from "./model";
 import { computeSuspects, DEFAULT_OUTLIER_KMH } from "./outliers";
 import { applyEdits, collectEdits, loadEdits, loadPrefs, safeStorage, saveEdits, savePrefs, type Edits } from "./persist";
-import { buildRoute } from "./route";
+import { Player } from "./play";
+import { buildRoute, type RouteResult } from "./route";
 import { bakeProject, buildCorrections, downloadText, renderCopyHtml, safeFilename } from "./savecopy";
 import { T } from "./strings";
 import { normalizeTheme, readMapColors, resolveTheme, THEME_IDS } from "./themes";
 import { Timeline, type DayState } from "./timeline";
+import { rampAt, timeRamp, tripOrder, tripT, type TripOrder } from "./trip";
 import { clamp, clockOf, formatCoord, formatKm, parseDay } from "./util";
 
 export interface MountOptions {
@@ -79,6 +81,16 @@ export class App {
   private offlineHint = false;
   private lastDistance = 0;
 
+  // trip order: colour by time, numbered stops, highlight, playback
+  private look: RouteLook = { ...DEFAULT_LOOK };
+  private order: TripOrder = { number: new Map(), ids: [], count: 0 };
+  private ramp: string[] = timeRamp("");
+  private lastRoute: RouteResult | null = null;
+  private player: Player;
+  private playBtn!: HTMLButtonElement;
+  private speedBtn!: HTMLButtonElement;
+  private legendEl!: HTMLElement;
+
   constructor(
     private host: HTMLElement,
     project: Project,
@@ -90,6 +102,15 @@ export class App {
     host.classList.add("pw-host");
     host.append(this.root);
     this.offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    this.player = new Player({
+      points: () => this.lastRoute?.points ?? [],
+      onFrame: (f) => this.map?.setPlay(f),
+      onStop: (it) => {
+        this.select(it.id, { scroll: true, byPlayer: true });
+        this.map?.follow(it);
+      },
+      onState: () => this.refreshPlay(),
+    });
     this.build();
     this.loadProject(project, true);
   }
@@ -113,6 +134,7 @@ export class App {
     this.hidden = eff.hidden;
     this.storageOk = this.probeStorage();
     this.groups = groupByDay(this.items);
+    this.order = tripOrder(this.items);
     this.groupOf.clear();
     for (const g of this.groups) for (const id of g.ids) this.groupOf.set(id, g.key);
     this.dayKey = null;
@@ -124,6 +146,11 @@ export class App {
       this.themePref = normalizeTheme(prefs.theme ?? project.options?.theme);
       this.basemapPref = prefs.basemap ?? project.options?.basemap ?? "auto";
       this.exaggeration = clamp(prefs.terrainExaggeration ?? DEFAULT_EXAGGERATION, 1, 3);
+      this.look = {
+        timeColor: prefs.routeTimeColor ?? DEFAULT_LOOK.timeColor,
+        numbers: prefs.routeNumbers ?? DEFAULT_LOOK.numbers,
+        highlight: prefs.routeHighlight ?? DEFAULT_LOOK.highlight,
+      };
       this.basemap = this.pickBasemap(this.basemapPref);
     }
     this.titleEl.textContent = project.title || T.appName;
@@ -180,11 +207,87 @@ export class App {
 
   private typeOk = (it: Item): boolean => this.typeFilter === "all" || it.kind === this.typeFilter;
 
-  private onMap = (it: Item): boolean =>
-    !this.hidden.has(it.id) &&
-    this.typeOk(it) &&
-    !(this.hideOutliers && this.suspects.has(it.id)) &&
-    (this.dayKey == null || dayKeyOf(it) === this.dayKey);
+  /** Shown on the map on any day (the chosen day is applied by `onMap`). */
+  private onMapAnyDay = (it: Item): boolean => !this.hidden.has(it.id) && this.typeOk(it) && !(this.hideOutliers && this.suspects.has(it.id));
+
+  private onMap = (it: Item): boolean => this.onMapAnyDay(it) && (this.dayKey == null || dayKeyOf(it) === this.dayKey);
+
+  // ---- trip order ---------------------------------------------------------------------------------
+
+  private tripT = (id: number): number | null => tripT(this.order, id);
+
+  private itemColor = (id: number): string | null => {
+    const t = this.look.timeColor ? this.tripT(id) : null;
+    return t == null ? null : rampAt(this.ramp, t);
+  };
+
+  /** A day's colour is the ramp halfway between its first and last stop. */
+  private dayColor = (key: string): string | null => {
+    if (!this.look.timeColor) return null;
+    const ts = (this.groups.find((g) => g.key === key)?.ids ?? []).map(this.tripT).filter((t): t is number => t != null);
+    return ts.length ? rampAt(this.ramp, (Math.min(...ts) + Math.max(...ts)) / 2) : null;
+  };
+
+  private hover(id: number | null): void {
+    this.map?.setHover(id);
+    this.timeline.setHover(id);
+  }
+
+  private setLook(look: RouteLook): void {
+    const contextChanged = look.highlight !== this.look.highlight;
+    this.look = look;
+    savePrefs({ routeTimeColor: look.timeColor, routeNumbers: look.numbers, routeHighlight: look.highlight });
+    this.map?.setLook(look);
+    if (contextChanged) this.refreshMap();
+    else this.refreshLegend();
+    this.timeline.refresh();
+    this.refreshPanels();
+  }
+
+  private togglePlay(): void {
+    if (this.player.state === "playing") this.player.pause();
+    else if (this.player.play()) this.closePops();
+  }
+
+  private refreshPlay(): void {
+    if (!this.playBtn) return;
+    const st = this.player.state;
+    const can = !!this.map && this.showRoute && (this.lastRoute?.points.length ?? 0) >= 2;
+    this.playBtn.disabled = !can && st === "stopped";
+    const label = st === "playing" ? T.play.pause : T.play.play;
+    this.playBtn.title = label;
+    this.playBtn.setAttribute("aria-label", label);
+    this.playBtn.setAttribute("aria-pressed", String(st !== "stopped"));
+    this.playBtn.replaceChildren(icon(st === "playing" ? ICONS.pause : ICONS.play, 18));
+    this.speedBtn.hidden = st === "stopped";
+    this.speedBtn.textContent = `${this.player.speed}x`;
+    this.speedBtn.title = T.play.speed(this.player.speed);
+    this.refreshCard();
+  }
+
+  /** Light-to-dark bar from the first photo's date to the last one's, with a tick where each day starts. */
+  private refreshLegend(): void {
+    if (!this.legendEl) return;
+    const on = this.look.timeColor && this.showRoute && this.order.count >= 2 && !!this.map;
+    this.legendEl.hidden = !on;
+    if (!on) return;
+    const first = this.items[this.order.ids[0]!]!;
+    const last = this.items[this.order.ids[this.order.count - 1]!]!;
+    const oneDay = dayKeyOf(first) === dayKeyOf(last);
+    const label = (it: Item) => {
+      const p = parseDay(dayKeyOf(it));
+      return oneDay || !p ? clockOf(it.time) : `${p.monthName.slice(0, 3)} ${p.day}`;
+    };
+    const ticks: HTMLElement[] = [];
+    let prev = "";
+    this.order.ids.forEach((id, k) => {
+      const day = dayKeyOf(this.items[id]!);
+      if (k > 0 && day !== prev && ticks.length < 60) ticks.push(h("i", { style: `left:${(100 * k) / (this.order.count - 1)}%` }));
+      prev = day;
+    });
+    const bar = h("span", { class: "pw-legend-bar", style: `background:linear-gradient(90deg,${this.ramp.join(",")})` }, ...ticks);
+    this.legendEl.replaceChildren(h("span", {}, label(first)), bar, h("span", {}, label(last)));
+  }
 
   private mapItems(): Item[] {
     return this.items.filter(this.onMap);
@@ -231,12 +334,22 @@ export class App {
   }
 
   private refreshMap(): void {
+    this.player.stop(); // anything that changes what is shown ends playback
     const items = this.mapItems();
     const pts = sortByTime(items.filter((i) => i.ts != null));
     const route = buildRoute(pts, this.suspects);
+    this.lastRoute = route;
     this.lastDistance = route.distanceKm;
+    // Around a chosen day, the rest of the trip stays on the map, faint, for context.
+    let context: RouteContext | null = null;
+    if (this.dayKey && this.look.highlight) {
+      const all = sortByTime(this.items.filter((i) => i.ts != null && this.onMapAnyDay(i)));
+      context = { route: buildRoute(all, this.suspects), day: this.dayKey };
+    }
     this.map?.setItems(items);
-    this.map?.setRoute(route, this.showRoute);
+    this.map?.setRoute(route, this.showRoute, context);
+    this.refreshLegend();
+    this.refreshPlay();
   }
 
   private refreshStats(): void {
@@ -264,7 +377,8 @@ export class App {
 
   // ---- selection & edits -------------------------------------------------------------------------
 
-  private select(id: number | null, how: { fly?: boolean; scroll?: boolean } = {}): void {
+  private select(id: number | null, how: { fly?: boolean; scroll?: boolean; byPlayer?: boolean } = {}): void {
+    if (!how.byPlayer) this.player.pause();
     this.selectedId = id;
     const it = id == null ? null : (this.items[id] ?? null);
     const dayChanged = !!(it && this.dayKey && dayKeyOf(it) !== this.dayKey);
@@ -332,7 +446,11 @@ export class App {
     const resolved = resolveTheme(this.themePref, !!this.mq?.matches);
     this.root.dataset.theme = resolved;
     this.root.dataset.themePref = this.themePref;
-    this.map?.setColors(readMapColors(this.root));
+    const colors = readMapColors(this.root);
+    this.ramp = routeRamp(colors, this.basemap);
+    this.map?.setColors(colors);
+    this.timeline.refresh();
+    this.refreshLegend();
     if (persist) savePrefs({ theme: this.themePref });
     this.refreshPanels();
   }
@@ -341,6 +459,9 @@ export class App {
     if (id === "terrain" && this.offline) return;
     this.basemap = id;
     this.map?.setBasemap(id, this.exaggeration);
+    this.ramp = routeRamp(readMapColors(this.root), id);
+    this.timeline.refresh();
+    this.refreshLegend();
     if (persist) {
       this.basemapPref = id;
       savePrefs({ basemap: id });
@@ -386,6 +507,9 @@ export class App {
             this.offlineHint = show;
             this.updateHintToast();
           },
+          stopNumber: (id) => this.order.number.get(id) ?? null,
+          tripT: this.tripT,
+          onHover: (id) => this.hover(id),
         },
         { basemap: this.basemap, globe: this.globe, exaggeration: this.exaggeration },
       );
@@ -394,6 +518,7 @@ export class App {
       mapEl.append(h("div", { class: "pw-nomap" }, T.noWebgl));
       this.map = null;
     }
+    this.map?.setLook(this.look);
   }
 
   private build(): void {
@@ -429,9 +554,19 @@ export class App {
       bGlobe.title = this.globe ? T.toolbar.flat : T.toolbar.globe;
       bGlobe.replaceChildren(icon(this.globe ? ICONS.flat : ICONS.globe, 18));
     });
+    this.playBtn = h("button", { class: "pw-tool", type: "button", title: T.play.play, "aria-label": T.play.play, "aria-pressed": "false" });
+    this.playBtn.append(icon(ICONS.play, 18));
+    this.playBtn.addEventListener("click", () => this.togglePlay());
+    this.speedBtn = h("button", { class: "pw-tool pw-speed", type: "button", hidden: true }, "1x");
+    this.speedBtn.addEventListener("click", () => {
+      this.player.cycleSpeed();
+      this.refreshPlay();
+    });
+    this.legendEl = h("div", { class: "pw-legend", role: "img", "aria-label": T.legend.label, title: T.legend.label, hidden: true });
     this.cardEl = h("div", { class: "pw-card", hidden: true });
     this.toastEl = h("div", { class: "pw-toast", role: "status" });
-    const main = h("main", { class: "pw-main" }, h("div", { class: "pw-map" }), h("div", { class: "pw-tools" }, bFit, bGlobe), this.cardEl, this.toastEl);
+    const tools = h("div", { class: "pw-tools" }, bFit, bGlobe, this.playBtn, this.speedBtn);
+    const main = h("main", { class: "pw-main" }, h("div", { class: "pw-map" }), tools, this.legendEl, this.cardEl, this.toastEl);
 
     // bottom: day navigation + timeline
     const bPrev = h("button", { class: "pw-daybtn", type: "button", title: T.days.prev, "aria-label": T.days.prev });
@@ -469,6 +604,10 @@ export class App {
       onToggleItem: (id, visible) => this.setHidden([id], !visible),
       onDayClick: (key) => this.selectDay(this.dayKey === key ? null : key),
       onToggleDay: (key) => this.toggleDay(key),
+      itemColor: this.itemColor,
+      dayColor: this.dayColor,
+      stopNumber: (id) => (this.look.numbers ? (this.order.number.get(id) ?? null) : null),
+      onHover: (id) => this.map?.setHover(id),
     });
     this.modal = new Modal(r, {
       item: (id) => this.items[id],
@@ -583,12 +722,20 @@ export class App {
       this.showRoute = v;
       this.refreshMap();
     });
+    const lookSw = (key: keyof RouteLook, label: string, hint: string) =>
+      sw(`look-${key}`, label, hint, () => this.look[key], (v) => this.setLook({ ...this.look, [key]: v }));
+    const order = [
+      h("div", { class: "pw-pop-title pw-pop-sub" }, T.filters.order),
+      lookSw("timeColor", T.filters.timeColor, T.filters.timeColorHint),
+      lookSw("numbers", T.filters.numbers, T.filters.numbersHint),
+      lookSw("highlight", T.filters.highlight, T.filters.highlightHint),
+    ];
     const speed = this.project?.options?.outlierSpeedKmh ?? DEFAULT_OUTLIER_KMH;
     const outl = sw("outliers", T.filters.outliers, T.filters.outliersHint.replace("{speed}", String(speed)), () => this.hideOutliers, (v) => {
       this.hideOutliers = v;
       this.refreshAll(false);
     });
-    return h("div", { class: "pw-pop pw-pop-right", hidden: true, role: "dialog", "aria-label": T.filters.title }, h("div", { class: "pw-pop-title" }, T.filters.title), seg, route, outl);
+    return h("div", { class: "pw-pop pw-pop-right", hidden: true, role: "dialog", "aria-label": T.filters.title }, h("div", { class: "pw-pop-title" }, T.filters.title), seg, route, outl, ...order);
   }
 
   private buildLayersPanel(): HTMLElement {
@@ -718,6 +865,7 @@ export class App {
     };
     setSwitch("route", this.showRoute);
     setSwitch("outliers", this.hideOutliers);
+    for (const k of ["timeColor", "numbers", "highlight"] as const) setSwitch(`look-${k}`, this.look[k]);
     const speed = this.project?.options?.outlierSpeedKmh ?? DEFAULT_OUTLIER_KMH;
     const oh = f.querySelector('[for="pw-sw-outliers"] .pw-hint');
     if (oh) oh.textContent = T.filters.outliersHint.replace("{speed}", String(speed));
@@ -773,7 +921,7 @@ export class App {
   private refreshCard(): void {
     const id = this.selectedId;
     const it = id == null ? null : this.items[id];
-    if (!it) {
+    if (!it || this.player.active) {
       this.cardEl.hidden = true;
       return;
     }
@@ -833,12 +981,16 @@ export class App {
       theme: this.root.dataset.theme ?? "",
       basemap: this.basemap,
       modalOpen: this.modal.isOpen,
+      play: this.player.state,
+      legend: !this.legendEl.hidden,
+      numberedCards: this.root.querySelectorAll(".pw-tl-num:not([hidden])").length,
       map: this.map?.stats() ?? null,
     };
   }
 
   destroy(): void {
     clearTimeout(this.toastTimer);
+    this.player.destroy();
     for (const c of this.cleanups) c();
     this.cleanups = [];
     this.modal.destroy();

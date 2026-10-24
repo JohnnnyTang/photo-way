@@ -33,6 +33,23 @@ export const T = {
     route: "Route",
     outliers: "Hide GPS outliers",
     outliersHint: "Hides items that would need more than {speed} km/h to reach. They stay in the timeline.",
+    order: "Trip order",
+    timeColor: "Color by time",
+    timeColorHint: "The route goes from light at the first photo to dark at the last.",
+    numbers: "Number the stops",
+    numbersHint: "Numbers follow capture time across the whole trip.",
+    highlight: "Highlight on hover",
+    highlightHint: "Pointing at a photo lights up its part of the route. A chosen day keeps the other days faint.",
+  },
+
+  play: {
+    play: "Play the trip",
+    pause: "Pause",
+    speed: (x: number) => `Playback speed ${x}x (click to change)`,
+  },
+
+  legend: {
+    label: "Trip order, first to last photo",
   },
 
   map: {
