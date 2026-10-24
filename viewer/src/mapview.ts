@@ -68,7 +68,6 @@ const MAX_LEAF_NUMBERS = 250;
 const CLUSTER_MAX_ZOOM = 14;
 const SRC_ITEMS = "pw-items";
 const SRC_ROUTE = "pw-route";
-const SRC_RUNS = "pw-runs";
 const SRC_ENDS = "pw-ends";
 const SRC_PLAY = "pw-play";
 const SRC_FOCUS = "pw-focus";
@@ -82,11 +81,8 @@ const LEG_LAYERS: { id: string; kinds: SegmentKind[]; opacity: number }[] = [
   { id: "pw-route-suspect", kinds: ["suspect"], opacity: 1 },
 ];
 
-const FOCUS_LAYERS: [string, SegmentKind[]][] = [
-  ["pw-focus-casing", ["normal", "link"]],
-  ["pw-focus-line", ["normal"]],
-  ["pw-focus-link", ["link"]],
-];
+/** Consecutive legs share one polyline while their colour stays within one of this many steps. */
+const COLOR_STEPS = 48;
 const IMAGERY: ReadonlySet<BasemapId> = new Set(["satellite", "satellite-labels", "terrain"]);
 
 /**
@@ -145,7 +141,12 @@ export class MapView {
   private ramp: string[];
   private hoverId: number | null = null;
   private play: PlayFrame | null = null;
-  private legCounts = { legs: 0, faint: 0 };
+  private legCounts = { legs: 0, faint: 0, features: 0 };
+  /** For each leg of the shown route, the first leg of the run it is drawn in (playback). */
+  private runStart: number[] = [];
+  /** Bumped on every data push, so the focus source knows when its legs may have moved. */
+  private routeVersion = 0;
+  private focusKey = "";
   private selected: Item | null = null;
   private colors: MapColors;
   private state: MapState;
@@ -197,13 +198,13 @@ export class MapView {
     if (this.destroyed || this.map.getSource(SRC_ITEMS)) return;
     const m = this.map;
     const c = this.colors;
+    this.focusKey = ""; // the new focus source starts empty
     this.onlineFail = 0;
     this.onlineOk = 0;
     this.failReported = false;
     if (!m.hasImage(ARROW)) m.addImage(ARROW, arrowImage(), { pixelRatio: 2 });
 
     m.addSource(SRC_ROUTE, { type: "geojson", data: EMPTY });
-    m.addSource(SRC_RUNS, { type: "geojson", data: EMPTY });
     m.addSource(SRC_ENDS, { type: "geojson", data: EMPTY });
     m.addSource(SRC_PLAY, { type: "geojson", data: EMPTY });
     m.addSource(SRC_FOCUS, { type: "geojson", data: EMPTY });
@@ -236,9 +237,10 @@ export class MapView {
     lineLayer("pw-route-link", { "line-color": color, "line-width": lineW, "line-dasharray": [1.6, 1.3] }, { "line-cap": "butt", "line-join": "round" });
     lineLayer("pw-route-suspect", { "line-color": c.suspect, "line-width": width(1.8, 3.2), "line-dasharray": [2, 2] }, { "line-cap": "butt" });
     // The focused item's legs, drawn wider on top.
-    m.addLayer({ id: "pw-focus-casing", type: "line", source: SRC_ROUTE, filter: this.focusFilter(["normal", "link"]), layout: round, paint: { "line-color": casing, "line-width": width(8.5, 14) } } as never);
-    m.addLayer({ id: "pw-focus-line", type: "line", source: SRC_ROUTE, filter: this.focusFilter(["normal"]), layout: round, paint: { "line-color": color, "line-width": width(4.5, 8) } } as never);
-    m.addLayer({ id: "pw-focus-link", type: "line", source: SRC_ROUTE, filter: this.focusFilter(["link"]), layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": color, "line-width": width(4.5, 8), "line-dasharray": [1.6, 1.3] } } as never);
+    const focusLine = (kinds: SegmentKind[]) => ["all", ["==", ["geometry-type"], "LineString"], ["in", ["get", "kind"], ["literal", kinds]]] as never;
+    m.addLayer({ id: "pw-focus-casing", type: "line", source: SRC_FOCUS, filter: focusLine(["normal", "link"]), layout: round, paint: { "line-color": casing, "line-width": width(8.5, 14) } });
+    m.addLayer({ id: "pw-focus-line", type: "line", source: SRC_FOCUS, filter: focusLine(["normal"]), layout: round, paint: { "line-color": color, "line-width": width(4.5, 8) } });
+    m.addLayer({ id: "pw-focus-link", type: "line", source: SRC_FOCUS, filter: focusLine(["link"]), layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": color, "line-width": width(4.5, 8), "line-dasharray": [1.6, 1.3] } });
     // Playback: the leg being travelled, up to the moving head.
     const playLine = ["==", ["geometry-type"], "LineString"] as never;
     m.addLayer({ id: "pw-play-casing", type: "line", source: SRC_PLAY, filter: playLine, layout: round, paint: { "line-color": casing, "line-width": casingW, "line-opacity": 0.85 } });
@@ -246,7 +248,7 @@ export class MapView {
     m.addLayer({
       id: "pw-route-arrows",
       type: "symbol",
-      source: SRC_RUNS,
+      source: SRC_ROUTE,
       filter: ["in", ["get", "kind"], ["literal", ["normal", "link"]]] as never,
       layout: {
         "symbol-placement": "line",
@@ -275,6 +277,7 @@ export class MapView {
       id: "pw-focus-ring",
       type: "circle",
       source: SRC_FOCUS,
+      filter: ["==", ["geometry-type"], "Point"] as never,
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 10, 14, 16] as never,
         "circle-color": "rgba(0, 0, 0, 0)",
@@ -348,15 +351,9 @@ export class MapView {
 
   private legFilter(kinds: SegmentKind[]): never {
     const f: unknown[] = ["all", ["in", ["get", "kind"], ["literal", kinds]]];
-    // While playing, only legs already travelled (their index in the played route is below `k`).
-    if (this.play) f.push([">=", ["get", "p"], 0], ["<", ["get", "p"], this.play.k]);
+    // While playing, only runs already travelled: their last leg (index in the played route) is below `k`.
+    if (this.play) f.push([">=", ["get", "p0"], 0], ["<", ["get", "p1"], this.play.k]);
     return f as never;
-  }
-
-  private focusFilter(kinds: SegmentKind[]): never {
-    const id = this.focusId();
-    if (id == null) return ["==", ["get", "a"], -1] as never;
-    return ["all", ["in", ["get", "kind"], ["literal", kinds]], ["any", ["==", ["get", "a"], id], ["==", ["get", "b"], id]]] as never;
   }
 
   /** Imagery is dark and busy, so the route sits on a white casing there; elsewhere on the theme halo. */
@@ -364,14 +361,12 @@ export class MapView {
     return IMAGERY.has(this.state.basemap) ? "#ffffff" : this.colors.halo;
   }
 
-  /** Context legs (other days) stay faint; with a focus, everything but its legs steps back. */
+  /** Context legs (other days) stay faint; with a focus, the route steps back (its legs are redrawn on top). */
   private legOpacity(base: number): never {
-    const id = this.focusId();
     const faint = ["==", ["get", "dim"], 1];
-    if (id == null) return ["case", faint, base * 0.3, base] as never;
-    const mine = ["any", ["==", ["get", "a"], id], ["==", ["get", "b"], id]];
+    if (this.focusId() == null) return ["case", faint, base * 0.3, base] as never;
     const rest = this.hoverId != null ? 0.35 : 0.6;
-    return ["case", mine, base, faint, base * 0.2, base * rest] as never;
+    return ["case", faint, base * 0.2, base * rest] as never;
   }
 
   private applyFocus(): void {
@@ -379,22 +374,34 @@ export class MapView {
     if (!this.overlayReady) return;
     for (const l of LEG_LAYERS) if (m.getLayer(l.id)) m.setPaintProperty(l.id, "line-opacity", this.legOpacity(l.opacity));
     if (m.getLayer("pw-route-arrows")) m.setPaintProperty("pw-route-arrows", "icon-opacity", this.legOpacity(1));
-    for (const [l, kinds] of FOCUS_LAYERS) if (m.getLayer(l)) m.setFilter(l, this.focusFilter(kinds));
+    // The focused item's legs and a ring around it live in their own small source.
     const id = this.focusId();
     const it = id == null ? undefined : this.host.item(id);
-    (m.getSource(SRC_FOCUS) as GeoJSONSource | undefined)?.setData(
-      it
-        ? { type: "FeatureCollection", features: [{ type: "Feature", properties: { t: this.host.tripT(it.id) }, geometry: { type: "Point", coordinates: [it.lon, it.lat] } }] }
-        : EMPTY,
-    );
+    // Every refresh passes through here; skip the worker round trip when nothing changed.
+    const key = it ? [it.id, it.lon, it.lat, this.routeVersion, this.showRoute].join(",") : "";
+    if (key === this.focusKey) return;
+    this.focusKey = key;
+    const features: GeoJSON.Feature[] = [];
+    if (it) {
+      const legs = this.showRoute ? ((this.context?.route ?? this.route)?.legs ?? []) : [];
+      for (const l of legs) {
+        if ((l.a === it.id || l.b === it.id) && l.kind !== "suspect") {
+          features.push({ type: "Feature", properties: { kind: l.kind, t: this.legT(l) }, geometry: { type: "LineString", coordinates: l.coords } });
+        }
+      }
+      features.push({ type: "Feature", properties: { t: this.host.tripT(it.id) }, geometry: { type: "Point", coordinates: [it.lon, it.lat] } });
+    }
+    (m.getSource(SRC_FOCUS) as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
   }
 
   setLook(look: RouteLook): void {
     const numbersChanged = look.numbers !== this.look.numbers || (look.numbers && look.timeColor !== this.look.timeColor);
+    const timeChanged = look.timeColor !== this.look.timeColor;
     this.look = { ...look };
     if (!this.overlayReady) return;
     this.applyColors();
-    this.applyFocus();
+    if (timeChanged) this.pushData(); // runs are split by colour step only when colouring by time
+    else this.applyFocus();
     if (numbersChanged) this.resetMarkers();
   }
 
@@ -427,12 +434,16 @@ export class MapView {
     }
     const leg = frame ? this.route?.legs[frame.k] : undefined;
     const t = leg ? this.legT(leg) : 0;
+    // The run being travelled is hidden by the filter; draw it from its first stop up to the head.
+    const pts = this.route?.points ?? [];
+    const start = frame ? (this.runStart[frame.k] ?? frame.k) : 0;
+    const travelled = frame ? [...pts.slice(start, frame.k + 1).map((q) => [q.lon, q.lat] as [number, number]), frame.head] : [];
     (m.getSource(SRC_PLAY) as GeoJSONSource | undefined)?.setData(
       frame
         ? {
             type: "FeatureCollection",
             features: [
-              { type: "Feature", properties: { t }, geometry: { type: "LineString", coordinates: [frame.from, frame.head] } },
+              { type: "Feature", properties: { t }, geometry: { type: "LineString", coordinates: travelled } },
               { type: "Feature", properties: { t }, geometry: { type: "Point", coordinates: frame.head } },
             ],
           }
@@ -517,9 +528,9 @@ export class MapView {
       })),
     });
     const routeSrc = m.getSource(SRC_ROUTE) as GeoJSONSource | undefined;
-    const runsSrc = m.getSource(SRC_RUNS) as GeoJSONSource | undefined;
     const endsSrc = m.getSource(SRC_ENDS) as GeoJSONSource | undefined;
     const r = this.route;
+    this.routeVersion++;
     if (r && this.showRoute) {
       const ctx = this.context;
       // `p`: the leg's index in the shown route (playback order); -1 for context-only legs.
@@ -533,34 +544,42 @@ export class MapView {
         p: ctx ? (shown.get(`${l.a}>${l.b}`) ?? -1) : l.i,
         dim: ctx && !(dayOf(l.a) === ctx.day && dayOf(l.b) === ctx.day) ? 1 : 0,
       }));
-      this.legCounts = { legs: legs.length, faint: legs.filter((l) => l.dim).length };
+      // Merge consecutive legs into runs while kind, faintness and colour step agree: a few dozen
+      // polylines draw far faster than one feature per leg, and arrows stay evenly spaced along them.
+      // `p0`..`p1` is the run's range of leg indexes in the shown route (playback), -1 for context.
+      const timed = this.look.timeColor;
+      const runs: { kind: SegmentKind; dim: number; p0: number; p1: number; step: number; tSum: number; n: number; coords: [number, number][] }[] = [];
+      for (const { leg, p, dim } of legs) {
+        const t = this.legT(leg);
+        const step = timed ? Math.min(COLOR_STEPS - 1, Math.floor(t * COLOR_STEPS)) : 0;
+        const last = runs[runs.length - 1];
+        const next = last && (p < 0 ? last.p1 < 0 : last.p1 >= 0 && p === last.p1 + 1);
+        if (last && next && last.kind === leg.kind && last.dim === dim && last.step === step) {
+          last.coords.push(leg.coords[1]);
+          last.p1 = p;
+          last.tSum += t;
+          last.n++;
+        } else runs.push({ kind: leg.kind, dim, p0: p, p1: p, step, tSum: t, n: 1, coords: [leg.coords[0], leg.coords[1]] });
+      }
+      this.runStart = [];
+      for (const run of runs) if (run.p0 >= 0) for (let q = run.p0; q <= run.p1; q++) this.runStart[q] = run.p0;
+      this.legCounts = { legs: legs.length, faint: legs.filter((l) => l.dim).length, features: runs.length };
       routeSrc?.setData({
         type: "FeatureCollection",
-        features: legs.map(({ leg, p, dim }) => ({
+        features: runs.map((run) => ({
           type: "Feature",
-          properties: { kind: leg.kind, a: leg.a, b: leg.b, p, dim, t: this.legT(leg) },
-          geometry: { type: "LineString", coordinates: leg.coords },
+          properties: { kind: run.kind, dim: run.dim, p0: run.p0, p1: run.p1, t: run.tSum / run.n },
+          geometry: { type: "LineString", coordinates: run.coords },
         })),
-      });
-      // Arrows run along merged polylines so they are spaced evenly; merge while kind and faintness agree.
-      const runs: { kind: SegmentKind; dim: number; coords: [number, number][] }[] = [];
-      for (const { leg, dim } of legs) {
-        const last = runs[runs.length - 1];
-        if (last && last.kind === leg.kind && last.dim === dim) last.coords.push(leg.coords[1]);
-        else runs.push({ kind: leg.kind, dim, coords: [leg.coords[0], leg.coords[1]] });
-      }
-      runsSrc?.setData({
-        type: "FeatureCollection",
-        features: runs.map((run) => ({ type: "Feature", properties: { kind: run.kind, dim: run.dim }, geometry: { type: "LineString", coordinates: run.coords } })),
       });
       const ends: GeoJSON.Feature[] = [];
       if (r.start) ends.push({ type: "Feature", properties: { role: "start" }, geometry: { type: "Point", coordinates: [r.start.lon, r.start.lat] } });
       if (r.end) ends.push({ type: "Feature", properties: { role: "end" }, geometry: { type: "Point", coordinates: [r.end.lon, r.end.lat] } });
       endsSrc?.setData({ type: "FeatureCollection", features: ends });
     } else {
-      this.legCounts = { legs: 0, faint: 0 };
+      this.legCounts = { legs: 0, faint: 0, features: 0 };
+      this.runStart = [];
       routeSrc?.setData(EMPTY);
-      runsSrc?.setData(EMPTY);
       endsSrc?.setData(EMPTY);
     }
     this.applyFocus();
@@ -863,6 +882,7 @@ export class MapView {
       look: { ...this.look },
       legs: this.legCounts.legs,
       faintLegs: this.legCounts.faint,
+      routeFeatures: this.legCounts.features,
       leafNumbers: this.leafMarkers.size,
       focus: this.focusId(),
       playing: this.play ? this.play.k : null,
