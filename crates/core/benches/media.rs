@@ -3,12 +3,14 @@
 //! Environment:
 //! - `PW_BENCH_FILE`: image to replicate (default: the committed HEIC fixture; point it at a
 //!   real 12 MP iPhone HEIC for meaningful numbers).
-//! - `PW_BENCH_N`: number of files (default 64).
+//! - `PW_BENCH_DIR`: directory of distinct HEICs (preferred for the 1,000-file target).
+//! - `PW_BENCH_N`: number of files (default 64 for FILE; all files for DIR).
 //! - `PW_BENCH_FULL`: `web` (default), `none` or `original`.
 //!
 //! For each (workers x libheif threads) combination it runs the full pipeline without a
-//! cache and prints files/s plus the extrapolated time for 1,000 files, then a second run
-//! with a warm cache.
+//! cache and prints files/s plus the extrapolated time for 1,000 files. A single replicated
+//! input only tests same-content deduplication in the cache run; use `PW_BENCH_DIR` to measure
+//! realistic cold-cache throughput.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -20,13 +22,17 @@ use photoway_core::model::Kind;
 use photoway_core::scan::{Entry, ScanReport};
 
 fn main() {
-    let src: PathBuf = std::env::var_os("PW_BENCH_FILE")
+    let supplied = std::env::var_os("PW_BENCH_FILE");
+    let source_dir = std::env::var_os("PW_BENCH_DIR").map(PathBuf::from);
+    assert!(
+        source_dir.is_none() || supplied.is_none(),
+        "set either PW_BENCH_DIR or PW_BENCH_FILE"
+    );
+    let src: PathBuf = supplied
+        .clone()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/sample-o6.heic"));
-    let n: usize = std::env::var("PW_BENCH_N")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(64);
+    let requested_n: Option<usize> = std::env::var("PW_BENCH_N").ok().and_then(|v| v.parse().ok());
     let full = match std::env::var("PW_BENCH_FULL").as_deref() {
         Ok("none") => FullSize::None,
         Ok("original") => FullSize::Original,
@@ -34,33 +40,50 @@ fn main() {
     };
 
     let dir = tempfile::tempdir().expect("tempdir");
-    let ext = src
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("heic")
-        .to_owned();
-    let entries: Vec<Entry> = (0..n)
-        .map(|i| {
-            let p = dir.path().join(format!("img{i:05}.{ext}"));
-            std::fs::copy(&src, &p).expect("copy");
-            Entry {
-                path: p,
-                motion: None,
-                meta: Meta {
-                    kind: Kind::Photo,
-                    lat: 0.0,
-                    lon: 0.0,
-                    alt: None,
-                    time: None,
-                    ts: None,
-                    ts_source: None,
-                    day: None,
-                    w: 0,
-                    h: 0,
-                    orientation: 1,
-                    dur: None,
-                },
-            }
+    let paths: Vec<PathBuf> = if let Some(ref source_dir) = source_dir {
+        let mut paths: Vec<_> = std::fs::read_dir(source_dir)
+            .expect("read PW_BENCH_DIR")
+            .map(|entry| entry.expect("directory entry").path())
+            .filter(|path| {
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("heic") || ext.eq_ignore_ascii_case("heif"))
+            })
+            .collect();
+        paths.sort();
+        paths.truncate(requested_n.unwrap_or(paths.len()));
+        paths
+    } else {
+        let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("heic");
+        (0..requested_n.unwrap_or(64))
+            .map(|i| {
+                let path = dir.path().join(format!("img{i:05}.{ext}"));
+                std::fs::copy(&src, &path).expect("copy");
+                path
+            })
+            .collect()
+    };
+    assert!(!paths.is_empty(), "no HEIC inputs found");
+    let n = paths.len();
+    let entries: Vec<Entry> = paths
+        .into_iter()
+        .map(|path| Entry {
+            path,
+            motion: None,
+            meta: Meta {
+                kind: Kind::Photo,
+                lat: 0.0,
+                lon: 0.0,
+                alt: None,
+                time: None,
+                ts: None,
+                ts_source: None,
+                day: None,
+                w: 0,
+                h: 0,
+                orientation: 1,
+                dur: None,
+            },
         })
         .collect();
     let report = ScanReport {
@@ -69,10 +92,12 @@ fn main() {
     };
     let cpus = std::thread::available_parallelism().map_or(4, |n| n.get());
     println!(
-        "{n} x {} ({} bytes), {cpus} logical CPUs, full={full:?}",
-        src.display(),
-        std::fs::metadata(&src).map_or(0, |m| m.len())
+        "{n} HEIC inputs from {}, {cpus} logical CPUs, full={full:?}",
+        source_dir.as_deref().unwrap_or(&src).display(),
     );
+    if supplied.is_none() && source_dir.is_none() {
+        println!("Bundled HEIC is 640x480; these timings do not validate the 12 MP target.");
+    }
 
     let mut combos = vec![
         (cpus, 0u32),

@@ -14,8 +14,10 @@ serde.workspace = true
 serde_json.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 
-# Wave 1 · B (media)
-rayon = "1"
+# Wave 1 · A (metadata) and B (media)
+nom-exif = "3.8"
+rayon = "1.10"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 fast_image_resize = "6.1"
 jpeg-encoder = "0.7"
 blake3 = "1"

@@ -34,7 +34,7 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 
 ## Rust crates
 
-508 crates in the dependency graph (generated from `cargo metadata`; build-only and platform-specific crates are included).
+516 crates in the dependency graph (generated from `cargo metadata`; build-only and platform-specific crates are included).
 
 | Crate | Version | Licence | Source |
 |---|---|---|---|
@@ -49,6 +49,7 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 | anstyle-query | 1.1.5 | MIT OR Apache-2.0 | https://github.com/rust-cli/anstyle.git |
 | anstyle-wincon | 3.0.11 | MIT OR Apache-2.0 | https://github.com/rust-cli/anstyle.git |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 | https://github.com/dtolnay/anyhow |
+| approx | 0.5.1 | Apache-2.0 | https://github.com/brendanzab/approx |
 | arrayvec | 0.7.8 | MIT OR Apache-2.0 | https://github.com/bluss/arrayvec |
 | async-broadcast | 0.7.2 | MIT OR Apache-2.0 | https://github.com/smol-rs/async-broadcast |
 | async-channel | 2.5.0 | Apache-2.0 OR MIT | https://github.com/smol-rs/async-channel |
@@ -187,6 +188,7 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 | gdkx11 | 0.18.2 | MIT | https://github.com/gtk-rs/gtk3-rs |
 | gdkx11-sys | 0.18.2 | MIT | https://github.com/gtk-rs/gtk3-rs |
 | generic-array | 0.14.7 | MIT | https://github.com/fizyk20/generic-array.git |
+| geo-types | 0.7.20 | MIT OR Apache-2.0 | https://github.com/georust/geo |
 | getrandom | 0.3.4 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
 | getrandom | 0.4.3 | MIT OR Apache-2.0 | https://github.com/rust-random/getrandom |
 | gio | 0.18.4 | MIT | https://github.com/gtk-rs/gtk-rs-core |
@@ -234,6 +236,7 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 | is_terminal_polyfill | 1.70.2 | MIT OR Apache-2.0 | https://github.com/polyfill-rs/is_terminal_polyfill |
 | is-docker | 0.2.0 | MIT | https://github.com/TheLarkInn/is-docker |
 | is-wsl | 0.4.0 | MIT | https://github.com/TheLarkInn/is-wsl |
+| iso6709parse | 0.1.2 | MIT | https://github.com/TimLikesTacos/iso6709parse.git |
 | itoa | 1.0.18 | MIT OR Apache-2.0 | https://github.com/dtolnay/itoa |
 | javascriptcore-rs | 1.1.2 | MIT | https://github.com/tauri-apps/javascriptcore-rs |
 | javascriptcore-rs-sys | 1.1.1 | MIT | https://github.com/tauri-apps/javascriptcore-rs |
@@ -258,6 +261,7 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 | libheif-rs | 3.0.0 | MIT | https://github.com/Cykooz/libheif-rs |
 | libheif-sys | 5.3.1+1.23.1 | MIT | https://github.com/cykooz/libheif-sys |
 | libloading | 0.7.4 | ISC | https://github.com/nagisa/rust_libloading/ |
+| libm | 0.2.16 | MIT | https://github.com/rust-lang/compiler-builtins |
 | libredox | 0.1.25 | MIT | https://gitlab.redox-os.org/redox-os/libredox.git |
 | linux-raw-sys | 0.12.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://github.com/sunfishcode/linux-raw-sys |
 | litemap | 0.8.3 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
@@ -268,6 +272,7 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 | memchr | 2.8.3 | Unlicense OR MIT | https://github.com/BurntSushi/memchr |
 | memoffset | 0.9.1 | MIT | https://github.com/Gilnaa/memoffset |
 | mime | 0.3.17 | MIT OR Apache-2.0 | https://github.com/hyperium/mime |
+| minimal-lexical | 0.2.1 | MIT/Apache-2.0 | https://github.com/Alexhuszagh/minimal-lexical |
 | miniz_oxide | 0.8.9 | MIT OR Zlib OR Apache-2.0 | https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide |
 | miniz_oxide | 0.9.1 | MIT OR Zlib OR Apache-2.0 | https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide |
 | mio | 1.2.4 | MIT | https://github.com/tokio-rs/mio |
@@ -277,6 +282,9 @@ Nothing in Photo Way's terms forbids modification or reverse engineering for you
 | ndk-context | 0.1.1 | MIT OR Apache-2.0 | https://github.com/rust-windowing/android-ndk-rs |
 | ndk-sys | 0.6.0+11769913 | MIT OR Apache-2.0 | https://github.com/rust-mobile/ndk |
 | new_debug_unreachable | 1.0.6 | MIT | https://github.com/mbrubeck/rust-debug-unreachable |
+| nom | 7.1.3 | MIT | https://github.com/Geal/nom |
+| nom | 8.0.0 | MIT | https://github.com/rust-bakery/nom |
+| nom-exif | 3.8.0 | see LICENSE | https://github.com/mindeng/nom-exif |
 | num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | https://github.com/illicitonion/num_enum |
 | num_enum_derive | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 | https://github.com/illicitonion/num_enum |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 | https://github.com/jhpratt/num-conv |
