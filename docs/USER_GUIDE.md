@@ -146,6 +146,13 @@ The day selector ("All days", **Previous day**, **Next day**, or **Choose a day*
 the eye button next to a day shows or hides every item of that day. Days are grouped by local time at the
 place the photo was taken, so a trip across time zones keeps the right dates.
 
+Each day in the day list shows how far you travelled that day, how much you climbed and descended, and how long
+the day lasted, for example "42.3 km · ↑ 610 m ↓ 580 m · 7 h 12 min". The line under the title shows the same
+for the whole trip, or for the day you have chosen. Distance follows the route; the jump from one day to the
+next counts only in the trip total. Elevation needs at least two photos with an altitude in that day, and
+changes under 10 m are ignored because phone altitudes are noisy. Hiding items, turning the GPS outlier filter
+on or off, or fixing a position updates the numbers straight away.
+
 ### Filters ("Filters", Show on map)
 
 - **Type:** All, Photos, Videos, Live.
