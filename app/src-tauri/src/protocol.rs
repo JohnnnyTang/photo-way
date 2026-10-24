@@ -314,10 +314,16 @@ pub fn handle(path: &str, range: Option<&str>, snap: &Snapshot) -> Payload {
             None => Payload::status(404),
         },
         Route::Ref(rel) => match (&snap.prepared, &snap.project) {
-            (Some(prepared), Some(project)) => match bundle::asset_for_ref(prepared, project, &rel) {
-                Some(asset) => asset_payload(asset, range),
-                None => Payload::status(404),
-            },
+            // Thumbnails are not `Asset`s, so `asset_for_ref` only covers full-size and video refs.
+            (Some(prepared), Some(project)) => {
+                if let Some(jpeg) = bundle::thumb_for_ref(prepared, project, &rel) {
+                    serve_source(Source::Bytes(jpeg), mime_for_ext("jpg"), range)
+                } else if let Some(asset) = bundle::asset_for_ref(prepared, project, &rel) {
+                    asset_payload(asset, range)
+                } else {
+                    Payload::status(404)
+                }
+            }
             _ => Payload::status(404),
         },
         Route::Src(n) => match snap.report.as_ref().and_then(|r| r.entries.get(n)) {
@@ -422,5 +428,50 @@ mod tests {
         assert_eq!(handle("/ref/thumbs/1.jpg", None, &snap).status, 404);
         assert_eq!(handle("/src/0", None, &snap).status, 404);
         assert_eq!(handle("/preview.js", None, &snap).status, 200);
+    }
+
+    #[test]
+    fn serves_thumbnail_full_and_video_refs_of_the_project() {
+        use photoway_core::media::{Prepared, Rendered};
+        use std::sync::Arc;
+
+        let project: Project = serde_json::from_value(serde_json::json!({
+            "format": "photoway", "version": 1, "id": "p", "title": "t", "generator": "g",
+            "createdAt": "2026-10-24T00:00:00Z",
+            "options": { "theme": "auto", "basemap": "auto", "outlierSpeedKmh": 300.0 },
+            "items": [{
+                "id": 0, "kind": "video", "name": "a.mov", "time": null, "ts": null, "tsSource": null,
+                "day": null, "lat": 1.0, "lon": 2.0, "w": 4, "h": 3,
+                "thumb": "thumbs/00000.jpg", "full": "media/00000.jpg", "video": "media/00000.mov"
+            }]
+        }))
+        .unwrap();
+        let prepared = Prepared {
+            rendered: vec![Rendered {
+                thumb_jpeg: b"thumb".to_vec(),
+                full: Some(Asset::Bytes {
+                    data: b"full".to_vec(),
+                    ext: "jpg",
+                }),
+                video: Some(Asset::Bytes {
+                    data: b"video".to_vec(),
+                    ext: "mov",
+                }),
+            }],
+            ..Default::default()
+        };
+        let snap = Snapshot {
+            report: None,
+            prepared: Some(Arc::new(prepared)),
+            project: Some(Arc::new(project)),
+        };
+        let thumb = handle("/ref/thumbs/00000.jpg", None, &snap);
+        assert_eq!(
+            (thumb.status, thumb.mime, thumb.body.as_slice()),
+            (200, "image/jpeg", &b"thumb"[..])
+        );
+        assert_eq!(handle("/ref/media/00000.jpg", None, &snap).body, b"full");
+        assert_eq!(handle("/ref/media/00000.mov", None, &snap).body, b"video");
+        assert_eq!(handle("/ref/thumbs/00001.jpg", None, &snap).status, 404);
     }
 }

@@ -21,6 +21,19 @@ export interface TimelineHost {
   onToggleItem(id: number, visible: boolean): void;
   onDayClick(key: string): void;
   onToggleDay(key: string): void;
+  /** Trip-order colour of an item or a day (colour by time), `null` when off. */
+  itemColor(id: number): string | null;
+  dayColor(key: string): string | null;
+  /** Stop number when numbering is on. */
+  stopNumber(id: number): number | null;
+  onHover(id: number | null): void;
+}
+
+/** Shows the trip-order colour as a stripe (`--pw-trip`), or removes it. */
+function paintTrip(node: HTMLElement, color: string | null): void {
+  if (color) node.style.setProperty("--pw-trip", color);
+  else node.style.removeProperty("--pw-trip");
+  node.classList.toggle("has-trip", !!color);
 }
 
 export const DAY_W = 84;
@@ -39,6 +52,7 @@ export class Timeline {
   private ro: ResizeObserver | null = null;
   private empty: HTMLElement;
   private lastClick = { id: -1, t: 0 };
+  private hoverId: number | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -156,6 +170,7 @@ export class Timeline {
       node.classList.toggle("is-current", this.host.isDaySelected(row.key));
       const count = node.querySelector(".pw-tl-daycount");
       if (count) count.textContent = T.days.count(this.host.dayCount(row.key));
+      paintTrip(node, this.host.dayColor(row.key));
       return;
     }
     const id = row.id;
@@ -169,6 +184,22 @@ export class Timeline {
     node.setAttribute("aria-current", this.host.isSelected(id) ? "true" : "false");
     const cb = node.querySelector<HTMLInputElement>("input.pw-tl-check");
     if (cb) cb.checked = !hidden;
+    node.classList.toggle("is-hover", id === this.hoverId);
+    paintTrip(node, this.host.itemColor(id));
+    const num = node.querySelector<HTMLElement>(".pw-tl-num");
+    const n = this.host.stopNumber(id);
+    if (num) {
+      num.hidden = n == null;
+      num.textContent = n == null ? "" : `#${n}`;
+    }
+  }
+
+  /** Marks the card of the item hovered on the map (or clears it). */
+  setHover(id: number | null): void {
+    const old = this.hoverId;
+    this.hoverId = id;
+    if (old != null) this.nodes.get(`i:${old}`)?.classList.remove("is-hover");
+    if (id != null) this.nodes.get(`i:${id}`)?.classList.add("is-hover");
   }
 
   private makeDay(key: string): HTMLElement {
@@ -187,6 +218,7 @@ export class Timeline {
       h("div", { class: "pw-tl-daywd" }, p ? p.weekday : ""),
       h("div", { class: "pw-tl-daycount" }, ""),
       eye,
+      h("span", { class: "pw-tl-trip", "aria-hidden": "true" }),
     );
     node.addEventListener("click", () => this.host.onDayClick(key));
     node.addEventListener("keydown", (e) => {
@@ -225,8 +257,11 @@ export class Timeline {
       cb,
       badge,
       flags,
-      h("span", { class: "pw-tl-time" }, clockOf(it.time)),
+      h("span", { class: "pw-tl-time" }, clockOf(it.time), h("span", { class: "pw-tl-num", hidden: true })),
+      h("span", { class: "pw-tl-trip", "aria-hidden": "true" }),
     );
+    node.addEventListener("mouseenter", () => this.host.onHover(id));
+    node.addEventListener("mouseleave", () => this.host.onHover(null));
     node.addEventListener("click", () => {
       const now = Date.now();
       const dbl = this.lastClick.id === id && now - this.lastClick.t < 450;

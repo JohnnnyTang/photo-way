@@ -45,10 +45,10 @@ jobs:
         run: node scripts/check-size.mjs --only viewer,basemap --require
       - name: Install Playwright browsers
         if: hashFiles('viewer/playwright.config.*') != ''
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install --with-deps chromium webkit firefox
       - name: End-to-end (Playwright, file://)
         if: hashFiles('viewer/playwright.config.*') != ''
-        run: npm run test:e2e -w viewer --if-present
+        run: npm run test:e2e -w viewer --if-present -- --project chromium --project webkit
       - uses: actions/upload-artifact@v7
         with:
           name: viewer-dist
@@ -131,11 +131,68 @@ jobs:
           path: cli-out
           if-no-files-found: error
 
+  # Wave 2 · G: the photoway CLI builds html/dir/zip outputs, then Playwright (Chromium, Firefox, WebKit) opens each
+  # from file:// and over HTTP (`photoway serve`), plus perf and output size gates. See docs/WAVE2_GATE.md.
+  e2e:
+    name: E2E (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # The suite must use the real photoway CLI here (no fallback to the viewer reference layouts).
+      PW_E2E_REQUIRE_CLI: "1"
+      # Shared CI runners are slower than a dev machine; the plan target is about 2 s.
+      PW_PERF_LOAD_MS: "6000" # same as the CI default in perf.spec.ts
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w viewer
+      - run: npm run fixtures
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-libheif
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('vcpkg/triplets/*') }}
+      - name: Build CLI (release)
+        run: cargo build --release -p photoway-cli
+      - name: Point the suite at the CLI
+        shell: bash
+        run: |
+          ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
+          echo "PW_CLI=${{ github.workspace }}/target/release/photoway$ext" >> "$GITHUB_ENV"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: viewer
+      - name: End-to-end outputs, perf and size (Playwright)
+        run: npm run test:e2e -w viewer
+      - name: Output size budgets
+        shell: bash
+        run: |
+          ids=shell,output-html,output-dir
+          [ "$PW_E2E_REQUIRE_CLI" = 1 ] && ids="$ids,output-zip"
+          node scripts/check-size.mjs --only "$ids" --require
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report-${{ runner.os }}
+          path: |
+            viewer/playwright-report
+            viewer/test-results
+          if-no-files-found: ignore
+
   # Single stable name for branch protection: require "CI OK" and nothing else.
   ci-ok:
     name: CI OK
     if: always()
-    needs: [viewer, rust]
+    needs: [viewer, rust, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded

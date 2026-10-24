@@ -15,6 +15,10 @@ export interface Prefs {
   theme?: string;
   basemap?: string;
   terrainExaggeration?: number;
+  /** Trip-order switches (see `RouteLook`). */
+  routeTimeColor?: boolean;
+  routeNumbers?: boolean;
+  routeHighlight?: boolean;
 }
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -99,6 +103,9 @@ export function loadPrefs(storage: StorageLike | null = safeStorage()): Prefs {
     if (typeof raw.basemap === "string") p.basemap = raw.basemap;
     if (typeof raw.terrainExaggeration === "number" && isFinite(raw.terrainExaggeration)) {
       p.terrainExaggeration = raw.terrainExaggeration;
+    }
+    for (const k of ["routeTimeColor", "routeNumbers", "routeHighlight"] as const) {
+      if (typeof raw[k] === "boolean") p[k] = raw[k];
     }
     return p;
   } catch {
