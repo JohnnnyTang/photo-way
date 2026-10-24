@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-24
+
+### Added
+- Distance, climb and descent, and time for each day in the day list, and for the whole trip (or the chosen
+  day) in the line under the title. They update as you hide items, fix positions or switch the GPS outlier
+  filter.
+- User guide: installing the unsigned app, getting originals with their location off iPhone and Android,
+  using the app and the map, privacy before sharing, the command line, troubleshooting. A rewritten README
+  with screenshots.
+
+### Fixed
+- Installer files are named without spaces (`Photo-Way_...`), so `SHA256SUMS.txt` matches the downloaded
+  files. GitHub had renamed `Photo Way_...` to `Photo.Way_...` on upload.
+
+### Project
+- Release smoke test on clean Windows, macOS arm64 and macOS Intel runners: checksums, install, launch and
+  uninstall, universal binaries, version numbers, and the command line tool, run against every published
+  release. A release checklist in `docs/RELEASING.md`.
+
 ## [0.1.0] - 2026-10-24
 
 First release: a small desktop app for Windows and macOS that turns geotagged photos and videos into a
