@@ -15,6 +15,10 @@ path = "src/main.rs"
 photoway-core.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+serde_json.workspace = true
 
 [build-dependencies]
 static_vcruntime = "3.0.0"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
