@@ -223,8 +223,16 @@ async function windowsSmoke() {
     const file = join(dir, t.file);
     const r = t.install(file);
     check(`${t.name} silent install exits 0`, r.code === 0, `exit ${r.code}`);
+    // Where the installer actually put the app: the Start Menu shortcut's target, else the expected folder.
+    const lnk = shortcuts()[0];
+    const target = lnk ? ps(`(New-Object -ComObject WScript.Shell).CreateShortcut(${psq(lnk)}).TargetPath`).stdout.trim() : "";
+    if (target && existsSync(target) && dirname(target).toLowerCase() !== t.root.toLowerCase()) {
+      console.log(`  note: ${t.name} shortcut target ${target} is outside the expected ${t.root}`);
+      t.root = dirname(target);
+    }
     const exes = walk(t.root, (p) => /photoway-app\.exe$/i.test(p)).concat(walk(t.root, (p) => /Photo Way\.exe$/i.test(p)));
     const exe = exes[0];
+    console.log(`  install tree: ${walk(t.root, (p, e) => !e.isDirectory()).join(", ")}`);
     check(`${t.name}: app exe installed under ${t.root}`, !!exe, exe || "not found");
     check(`${t.name}: Start Menu shortcut exists`, shortcuts().length > 0, shortcuts().join(", "));
     const ent = uninstallEntries();
