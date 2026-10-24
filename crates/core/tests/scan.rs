@@ -149,6 +149,7 @@ fn reads_video_location_time_and_rotation() {
         h: 1080,
         rotated: true,
         millis: 2900,
+        live_id: None,
     };
     write_mov(&path, &m);
     let got = meta::read(&path).unwrap().unwrap();
@@ -173,6 +174,7 @@ fn video_without_location_is_none() {
             h: 8,
             rotated: false,
             millis: 1000,
+            live_id: None,
         },
     );
     assert_eq!(meta::read(&path).unwrap(), None);
@@ -304,6 +306,16 @@ fn scan_detects_duplicates() {
     write_jpeg(&dir.join("other.jpg"), &s, 200);
     let r = scan(&[dir.path().to_path_buf()], &opts(), &NoProgress).unwrap();
     assert_eq!(r.entries.len(), 2);
+
+    // Equal size, time and GPS still do not prove that file contents match.
+    let mut bytes = common::jpeg_bytes(&s, 1);
+    bytes.extend_from_slice(b"a");
+    std::fs::write(dir.join("tail-a.jpg"), &bytes).unwrap();
+    *bytes.last_mut().unwrap() = b'b';
+    std::fs::write(dir.join("tail-b.jpg"), &bytes).unwrap();
+    let r = scan(&[dir.path().to_path_buf()], &opts(), &NoProgress).unwrap();
+    assert!(r.entries.iter().any(|e| e.path.ends_with("tail-a.jpg")));
+    assert!(r.entries.iter().any(|e| e.path.ends_with("tail-b.jpg")));
 }
 
 #[test]
@@ -321,6 +333,7 @@ fn scan_pairs_live_photos() {
         h: 8,
         rotated: false,
         millis: 2900,
+        live_id: None,
     };
     write_mov(&dir.join("img_1.MOV"), &clip);
     write_mov(
@@ -360,6 +373,74 @@ fn scan_pairs_live_photos() {
     let r = scan(&[dir.path().to_path_buf()], &off, &NoProgress).unwrap();
     assert_eq!(r.entries.len(), 3);
     assert!(r.entries.iter().all(|e| e.motion.is_none()));
+}
+
+#[test]
+fn live_photo_identifier_pairs_different_names_and_rejects_conflicts() {
+    let dir = TempDir::new("live-id");
+    let still = Shot {
+        live_id: Some("AAAA1111-2222-3333-4444-555566667777"),
+        ..shot(8, 8, "2026:07:23 10:00:00", geo(1.0, 1.0))
+    };
+    write_jpeg(&dir.join("still.jpg"), &still, 1);
+    let clip = Mov {
+        iso6709: Some("+01.0000+001.0000/"),
+        created_unix: 1_784_788_800,
+        w: 8,
+        h: 8,
+        rotated: false,
+        millis: 2900,
+        live_id: still.live_id,
+    };
+    write_mov(&dir.join("renamed.mov"), &clip);
+    assert_eq!(
+        meta::content_identifier(&dir.join("still.jpg")),
+        still.live_id.map(str::to_owned)
+    );
+    assert_eq!(
+        meta::content_identifier(&dir.join("renamed.mov")),
+        still.live_id.map(str::to_owned)
+    );
+    let r = scan(&[dir.path().to_path_buf()], &opts(), &NoProgress).unwrap();
+    assert_eq!(r.entries.len(), 1, "{r:?}");
+    assert_eq!(r.entries[0].meta.kind, Kind::Live);
+    assert_eq!(
+        r.entries[0].motion.as_ref().unwrap().file_name().unwrap(),
+        "renamed.mov"
+    );
+
+    write_mov(
+        &dir.join("still.mov"),
+        &Mov {
+            live_id: Some("DIFFERENT"),
+            ..clip
+        },
+    );
+    let r = scan(&[dir.path().to_path_buf()], &opts(), &NoProgress).unwrap();
+    assert!(
+        r.entries
+            .iter()
+            .any(|e| e.path.ends_with("still.mov") && e.meta.kind == Kind::Video)
+    );
+    assert_eq!(r.entries.iter().filter(|e| e.meta.kind == Kind::Live).count(), 1);
+}
+
+#[test]
+fn unreadable_motion_is_reported_and_still_is_kept() {
+    let dir = TempDir::new("bad-motion");
+    write_jpeg(
+        &dir.join("a.jpg"),
+        &shot(8, 8, "2026:07:23 10:00:00", geo(1.0, 1.0)),
+        1,
+    );
+    std::fs::write(dir.join("a.mov"), b"broken movie").unwrap();
+    let r = scan(&[dir.path().to_path_buf()], &opts(), &NoProgress).unwrap();
+    assert_eq!(r.entries.len(), 1);
+    assert_eq!(r.entries[0].meta.kind, Kind::Photo);
+    assert_eq!(
+        r.skipped.iter().find(|(p, _)| p.ends_with("a.mov")).map(|s| s.1),
+        Some(SkipReason::Unreadable)
+    );
 }
 
 #[test]

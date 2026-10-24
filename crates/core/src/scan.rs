@@ -16,12 +16,21 @@ pub const VIDEO_EXTS: &[&str] = &["mov", "mp4", "m4v"];
 /// Still formats that can be the photo half of a Live Photo, in pairing priority order.
 const LIVE_STILL_EXTS: &[&str] = &["heic", "heif", "jpg", "jpeg"];
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ScanOptions {
     /// Descend into sub-directories of input folders.
     pub recursive: bool,
     /// Pair HEIC/JPEG stills with same-named MOV clips into `Kind::Live`.
     pub pair_live_photos: bool,
+}
+
+impl Default for ScanOptions {
+    fn default() -> Self {
+        Self {
+            recursive: true,
+            pair_live_photos: true,
+        }
+    }
 }
 
 /// One usable (geotagged) media entry found by [`scan`].
@@ -47,6 +56,13 @@ pub struct ScanReport {
     pub entries: Vec<Entry>,
     /// Sorted by path.
     pub skipped: Vec<(PathBuf, SkipReason)>,
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct MediaFingerprint {
+    kind: u8,
+    still: (u64, u64),
+    motion: Option<(u64, u64)>,
 }
 
 fn ext_lower(path: &Path) -> Option<String> {
@@ -153,6 +169,7 @@ impl Collector<'_> {
                 continue;
             }
             let Ok(md) = std::fs::metadata(&path) else {
+                self.skipped.push((path, SkipReason::Unreadable));
                 continue;
             };
             if has_hidden_attr(&md) {
@@ -164,6 +181,8 @@ impl Collector<'_> {
                 }
             } else if is_media(&path) {
                 self.add_file(path);
+            } else {
+                self.skipped.push((path, SkipReason::Unsupported));
             }
         }
         Ok(())
@@ -176,9 +195,10 @@ struct Unit {
     motion: Option<PathBuf>,
 }
 
-/// Pairs each still with the `.mov` sharing its folder and (case-insensitive) stem. When several
-/// stills share the stem (`IMG_1.HEIC` + `IMG_1.JPG`) the first by [`LIVE_STILL_EXTS`] wins.
-fn build_units(files: Vec<PathBuf>, pair: bool) -> Vec<Unit> {
+/// Prefer Apple's shared content identifier, then a same-folder filename match when an
+/// identifier is absent. Conflicting identifiers must never be paired by filename.
+fn build_units(mut files: Vec<PathBuf>, pair: bool) -> Vec<Unit> {
+    files.sort();
     if !pair {
         return files
             .into_iter()
@@ -193,30 +213,40 @@ fn build_units(files: Vec<PathBuf>, pair: bool) -> Vec<Unit> {
                 .unwrap_or_default(),
         )
     };
-    let mut stills: HashMap<_, (usize, &PathBuf)> = HashMap::new();
-    let mut movs: HashMap<_, &PathBuf> = HashMap::new();
+    let mut stills = Vec::new();
+    let mut movs_by_stem = HashMap::new();
+    let mut movs_by_id = HashMap::new();
+    let mut ids = HashMap::new();
     for p in &files {
         let ext = ext_lower(p).unwrap_or_default();
         if ext == "mov" {
-            movs.entry(key(p)).or_insert(p);
+            movs_by_stem.entry(key(p)).or_insert(p);
+            if let Some(id) = meta::content_identifier(p) {
+                movs_by_id.entry(id.clone()).or_insert(p);
+                ids.insert(p, id);
+            }
         } else if let Some(rank) = LIVE_STILL_EXTS.iter().position(|e| *e == ext) {
-            let slot = stills.entry(key(p)).or_insert((rank, p));
-            if rank < slot.0 {
-                *slot = (rank, p);
+            stills.push((rank, p));
+            if let Some(id) = meta::content_identifier(p) {
+                ids.insert(p, id);
             }
         }
     }
-    let mut pairs: HashMap<&PathBuf, &PathBuf> = HashMap::new();
-    let mut consumed: HashSet<&PathBuf> = HashSet::new();
-    for (k, (_, still)) in &stills {
-        if let Some(mov) = movs.get(k) {
-            pairs.insert(still, mov);
-            consumed.insert(mov);
+    stills.sort_by_key(|(rank, p)| (*rank, *p));
+    let mut motion_of = HashMap::new();
+    let mut consumed = HashSet::new();
+    for (_, still) in stills {
+        let by_id = ids.get(still).and_then(|id| movs_by_id.get(id)).copied();
+        let by_stem = movs_by_stem
+            .get(&key(still))
+            .copied()
+            .filter(|mov| !matches!((ids.get(still), ids.get(*mov)), (Some(a), Some(b)) if a != b));
+        if let Some(mov) = by_id.or(by_stem)
+            && consumed.insert(mov.clone())
+        {
+            motion_of.insert(still.clone(), mov.clone());
         }
     }
-    let motion_of: HashMap<PathBuf, PathBuf> =
-        pairs.into_iter().map(|(s, m)| (s.clone(), m.clone())).collect();
-    let consumed: HashSet<PathBuf> = consumed.into_iter().cloned().collect();
     files
         .into_iter()
         .filter(|p| !consumed.contains(p))
@@ -227,46 +257,81 @@ fn build_units(files: Vec<PathBuf>, pair: bool) -> Vec<Unit> {
         .collect()
 }
 
-enum Outcome {
-    Entry(Entry),
-    Skip(SkipReason),
+struct Outcome {
+    entry: Option<Entry>,
+    skipped: Vec<(PathBuf, SkipReason)>,
 }
 
-fn read_unit(unit: &Unit) -> Result<Outcome> {
-    let still = match meta::read(&unit.path) {
-        Ok(m) => m,
-        Err(Error::Cancelled) => return Err(Error::Cancelled),
-        Err(_) => return Ok(Outcome::Skip(SkipReason::Unreadable)),
+fn read_unit(unit: &Unit) -> Outcome {
+    let classify = |path: &Path| match meta::read(path) {
+        Ok(Some(meta)) => (Some(meta), None),
+        Ok(None) => (None, Some(SkipReason::NoLocation)),
+        Err(_) => (None, Some(SkipReason::Unreadable)),
     };
+    let (still, still_reason) = classify(&unit.path);
     let Some(motion_path) = &unit.motion else {
-        return Ok(match still {
-            Some(meta) => Outcome::Entry(Entry {
+        return Outcome {
+            entry: still.map(|meta| Entry {
                 path: unit.path.clone(),
                 motion: None,
                 meta,
             }),
-            None => Outcome::Skip(SkipReason::NoLocation),
-        });
+            skipped: still_reason
+                .map(|r| vec![(unit.path.clone(), r)])
+                .unwrap_or_default(),
+        };
     };
-    let clip = meta::read(motion_path).ok().flatten();
-    // A still without GPS may still pair with a geotagged clip; the clip then supplies everything.
-    let Some(mut m) = still.or_else(|| clip.clone()) else {
-        return Ok(Outcome::Skip(SkipReason::NoLocation));
+    let (clip, clip_reason) = classify(motion_path);
+    let mut skipped = Vec::new();
+    let entry = match (still, clip) {
+        (Some(mut m), clip) => {
+            if clip_reason == Some(SkipReason::Unreadable) {
+                skipped.push((motion_path.clone(), SkipReason::Unreadable));
+                Some(Entry {
+                    path: unit.path.clone(),
+                    motion: None,
+                    meta: m,
+                })
+            } else {
+                m.kind = Kind::Live;
+                m.dur = clip.and_then(|c| c.dur).or(m.dur);
+                Some(Entry {
+                    path: unit.path.clone(),
+                    motion: Some(motion_path.clone()),
+                    meta: m,
+                })
+            }
+        }
+        (None, Some(mut m)) if still_reason == Some(SkipReason::NoLocation) => {
+            // The clip can supply location and time for an otherwise valid still.
+            m.kind = Kind::Live;
+            Some(Entry {
+                path: unit.path.clone(),
+                motion: Some(motion_path.clone()),
+                meta: m,
+            })
+        }
+        (None, Some(m)) => {
+            skipped.push((unit.path.clone(), SkipReason::Unreadable));
+            Some(Entry {
+                path: motion_path.clone(),
+                motion: None,
+                meta: m,
+            })
+        }
+        (None, None) => {
+            skipped.push((unit.path.clone(), still_reason.unwrap_or(SkipReason::Unreadable)));
+            skipped.push((motion_path.clone(), clip_reason.unwrap_or(SkipReason::Unreadable)));
+            None
+        }
     };
-    m.kind = Kind::Live;
-    m.dur = clip.and_then(|c| c.dur).or(m.dur);
-    Ok(Outcome::Entry(Entry {
-        path: unit.path.clone(),
-        motion: Some(motion_path.clone()),
-        meta: m,
-    }))
+    Outcome { entry, skipped }
 }
 
 /// Walks `inputs` (files or folders) and reads metadata from every media file found.
 ///
 /// Output order is deterministic regardless of thread scheduling or input order. Files reached
-/// twice, and files whose size, capture instant and GPS position all match an earlier
-/// file (by path order), are reported as [`SkipReason::Duplicate`].
+/// twice, and byte-identical files are reported as [`SkipReason::Duplicate`].
 pub fn scan(inputs: &[PathBuf], opts: &ScanOptions, progress: &dyn Progress) -> Result<ScanReport> {
     let mut c = Collector {
         opts,
@@ -297,16 +362,17 @@ pub fn scan(inputs: &[PathBuf], opts: &ScanOptions, progress: &dyn Progress) -> 
             let n = done.fetch_add(1, Ordering::Relaxed) + 1;
             let label = unit.path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             progress.update(n, total, label);
-            out
+            Ok(out)
         })
         .collect();
 
     let mut entries = Vec::new();
-    for (unit, outcome) in units.iter().zip(outcomes) {
-        match outcome? {
-            Outcome::Entry(e) => entries.push(e),
-            Outcome::Skip(r) => skipped.push((unit.path.clone(), r)),
+    for outcome in outcomes {
+        let outcome = outcome?;
+        if let Some(entry) = outcome.entry {
+            entries.push(entry);
         }
+        skipped.extend(outcome.skipped);
     }
     if progress.cancelled() {
         return Err(Error::Cancelled);
@@ -316,25 +382,83 @@ pub fn scan(inputs: &[PathBuf], opts: &ScanOptions, progress: &dyn Progress) -> 
         (a.meta.ts.is_none(), a.meta.ts, &a.path).cmp(&(b.meta.ts.is_none(), b.meta.ts, &b.path))
     });
 
-    let mut seen = HashSet::new();
+    let mut seen: HashMap<MediaFingerprint, Vec<Entry>> = HashMap::new();
     let mut kept = Vec::with_capacity(entries.len());
     for e in entries {
-        let dup = e.meta.ts.is_some_and(|ts| {
-            let size = std::fs::metadata(&e.path).map(|m| m.len()).unwrap_or(0);
-            !seen.insert((size, ts, e.meta.lat.to_bits(), e.meta.lon.to_bits()))
+        let key = file_fingerprint(&e.path)
+            .and_then(|still| {
+                let motion = e.motion.as_deref().map(file_fingerprint).transpose()?;
+                let kind = match e.meta.kind {
+                    Kind::Photo => 0,
+                    Kind::Video => 1,
+                    Kind::Live => 2,
+                };
+                Ok(MediaFingerprint { kind, still, motion })
+            })
+            .ok();
+        let Some(key) = key else {
+            kept.push(e);
+            continue;
+        };
+        let peers = seen.entry(key).or_default();
+        let dup = peers.iter().any(|p| {
+            p.meta.kind == e.meta.kind
+                && files_equal(&p.path, &e.path).unwrap_or(false)
+                && match (&p.motion, &e.motion) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => files_equal(a, b).unwrap_or(false),
+                    _ => false,
+                }
         });
         if dup {
             skipped.push((e.path, SkipReason::Duplicate));
         } else {
+            peers.push(e.clone());
             kept.push(e);
         }
     }
 
     skipped.sort_by(|a, b| a.0.cmp(&b.0));
+    skipped.dedup();
     Ok(ScanReport {
         entries: kept,
         skipped,
     })
+}
+
+fn file_fingerprint(path: &Path) -> std::io::Result<(u64, u64)> {
+    use std::hash::Hasher;
+    use std::io::Read;
+    let mut file = std::io::BufReader::new(std::fs::File::open(path)?);
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut size = 0u64;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.write(&buf[..n]);
+        size += n as u64;
+    }
+    Ok((size, hasher.finish()))
+}
+
+fn files_equal(a: &Path, b: &Path) -> std::io::Result<bool> {
+    use std::io::Read;
+    let mut a = std::io::BufReader::new(std::fs::File::open(a)?);
+    let mut b = std::io::BufReader::new(std::fs::File::open(b)?);
+    let mut left = [0u8; 64 * 1024];
+    let mut right = [0u8; 64 * 1024];
+    loop {
+        let n = a.read(&mut left)?;
+        if n != b.read(&mut right)? || left[..n] != right[..n] {
+            return Ok(false);
+        }
+        if n == 0 {
+            return Ok(true);
+        }
+    }
 }
 
 #[cfg(test)]

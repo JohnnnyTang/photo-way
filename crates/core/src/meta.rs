@@ -409,7 +409,7 @@ pub(crate) fn resolve_time(raw: &RawTimes) -> Resolved {
 fn child_boxes(data: &[u8]) -> Vec<([u8; 4], &[u8])> {
     let mut out = Vec::new();
     let mut pos = 0usize;
-    while pos + 8 <= data.len() {
+    while pos.checked_add(8).is_some_and(|end| end <= data.len()) {
         let size = u32::from_be_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
         let typ: [u8; 4] = data[pos + 4..pos + 8].try_into().unwrap();
         let (hdr, total) = match size {
@@ -422,11 +422,14 @@ fn child_boxes(data: &[u8]) -> Vec<([u8; 4], &[u8])> {
             }
             n => (8, n),
         };
-        if total < hdr || pos + total > data.len() {
+        let Some(end) = pos.checked_add(total) else {
+            break;
+        };
+        if total < hdr || end > data.len() {
             break;
         }
-        out.push((typ, &data[pos + hdr..pos + total]));
-        pos += total;
+        out.push((typ, &data[pos + hdr..end]));
+        pos = end;
     }
     out
 }
@@ -458,10 +461,14 @@ pub(crate) fn tkhd_display_dims(moov: &[u8]) -> Option<(u32, u32)> {
 }
 
 fn video_display_dims(path: &Path) -> Option<(u32, u32)> {
+    tkhd_display_dims(&moov_body(path)?)
+}
+
+fn moov_body(path: &Path) -> Option<Vec<u8>> {
     let mut f = File::open(path).ok()?;
     let len = f.metadata().ok()?.len();
     let mut pos = 0u64;
-    while pos + 8 <= len {
+    while pos.checked_add(8).is_some_and(|end| end <= len) {
         f.seek(SeekFrom::Start(pos)).ok()?;
         let mut head = [0u8; 16];
         f.read_exact(&mut head[..8]).ok()?;
@@ -474,22 +481,123 @@ fn video_display_dims(path: &Path) -> Option<(u32, u32)> {
             }
             n => (8, n),
         };
-        if total < hdr {
+        let end = pos.checked_add(total)?;
+        if total < hdr || end > len {
             return None;
         }
         if &head[4..8] == b"moov" {
             let body = total - hdr;
-            if body > 64 << 20 || pos + total > len {
+            if body > 64 << 20 {
                 return None;
             }
             let mut buf = vec![0u8; body as usize];
             f.seek(SeekFrom::Start(pos + hdr)).ok()?;
             f.read_exact(&mut buf).ok()?;
-            return tkhd_display_dims(&buf);
+            return Some(buf);
         }
-        pos += total;
+        pos = end;
     }
     None
+}
+
+/// Apple's identifier shared by the still and movie halves of a Live Photo.
+/// Files exported by some services lose it, so callers also need a filename fallback.
+pub fn content_identifier(path: &Path) -> Option<String> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    if matches!(ext.as_str(), "mov" | "mp4" | "m4v") {
+        return movie_content_identifier(&moov_body(path)?);
+    }
+    if !matches!(ext.as_str(), "heic" | "heif" | "jpg" | "jpeg") {
+        return None;
+    }
+    let mut parser = MediaParser::new();
+    let exif: Exif = parser.parse_exif(MediaSource::open(path).ok()?).ok()?.into();
+    apple_makernote_identifier(exif.get(ExifTag::MakerNote)?.as_undefined()?)
+}
+
+fn clean_identifier(bytes: &[u8]) -> Option<String> {
+    let value = std::str::from_utf8(bytes).ok()?.trim_end_matches('\0').trim();
+    (!value.is_empty() && value.len() <= 128).then(|| value.to_owned())
+}
+
+fn apple_makernote_identifier(note: &[u8]) -> Option<String> {
+    if !note.starts_with(b"Apple iOS\0") || note.len() < 16 {
+        return None;
+    }
+    let big = match note.get(12..14)? {
+        b"MM" => true,
+        b"II" => false,
+        _ => return None,
+    };
+    let u16_at = |i: usize| {
+        let b: [u8; 2] = note.get(i..i.checked_add(2)?)?.try_into().ok()?;
+        Some(if big {
+            u16::from_be_bytes(b)
+        } else {
+            u16::from_le_bytes(b)
+        })
+    };
+    let u32_at = |i: usize| {
+        let b: [u8; 4] = note.get(i..i.checked_add(4)?)?.try_into().ok()?;
+        Some(if big {
+            u32::from_be_bytes(b)
+        } else {
+            u32::from_le_bytes(b)
+        })
+    };
+    let count = u16_at(14)? as usize;
+    for n in 0..count {
+        let i = 16usize.checked_add(n.checked_mul(12)?)?;
+        if u16_at(i)? != 0x0011 {
+            continue;
+        }
+        if u16_at(i + 2)? != 2 {
+            return None;
+        }
+        let len = u32_at(i + 4)? as usize;
+        let bytes = if len <= 4 {
+            note.get(i + 8..i + 8 + len)?
+        } else {
+            let offset = u32_at(i + 8)? as usize;
+            note.get(offset..offset.checked_add(len)?)?
+        };
+        return clean_identifier(bytes);
+    }
+    None
+}
+
+fn movie_content_identifier(moov: &[u8]) -> Option<String> {
+    let meta = child_boxes(moov)
+        .into_iter()
+        .find(|(kind, _)| kind == b"meta")
+        .map(|(_, body)| body)
+        .or_else(|| {
+            child_boxes(moov)
+                .into_iter()
+                .find(|(kind, _)| kind == b"udta")
+                .and_then(|(_, body)| child_boxes(body).into_iter().find(|(kind, _)| kind == b"meta"))
+                .map(|(_, body)| body)
+        })?;
+    // QuickTime has plain `meta`; ISO BMFF prefixes its children with version/flags.
+    let boxes = if child_boxes(meta).iter().any(|(kind, _)| kind == b"keys") {
+        child_boxes(meta)
+    } else {
+        child_boxes(meta.get(4..)?)
+    };
+    let keys = boxes.iter().find(|(kind, _)| kind == b"keys")?.1;
+    let ilst = boxes.iter().find(|(kind, _)| kind == b"ilst")?.1;
+    let count = u32::from_be_bytes(keys.get(4..8)?.try_into().ok()?) as usize;
+    let mut wanted = None;
+    for (n, (namespace, value)) in child_boxes(keys.get(8..)?).into_iter().enumerate().take(count) {
+        if &namespace == b"mdta" && value == b"com.apple.quicktime.content.identifier" {
+            wanted = Some(u32::try_from(n + 1).ok()?.to_be_bytes());
+            break;
+        }
+    }
+    let wanted = wanted?;
+    let item = child_boxes(ilst).into_iter().find(|(kind, _)| *kind == wanted)?.1;
+    let data = child_boxes(item).into_iter().find(|(kind, _)| kind == b"data")?.1;
+    clean_identifier(data.get(8..)?)
 }
 
 #[cfg(test)]

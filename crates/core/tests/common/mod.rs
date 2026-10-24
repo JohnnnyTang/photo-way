@@ -70,6 +70,7 @@ pub struct Shot {
     /// `+08:00`
     pub offset: Option<&'static str>,
     pub gps: Option<Gps>,
+    pub live_id: Option<&'static str>,
 }
 
 impl Shot {
@@ -81,6 +82,7 @@ impl Shot {
             local: None,
             offset: None,
             gps: None,
+            live_id: None,
         }
     }
 }
@@ -183,6 +185,22 @@ fn exif_entries(shot: &Shot) -> Vec<Entry> {
     if let Some(o) = shot.offset {
         e.push(ascii(0x9011, o));
     }
+    if let Some(id) = shot.live_id {
+        let mut note = b"Apple iOS\0\0\x01MM\0\x01".to_vec();
+        note.extend_from_slice(&0x0011u16.to_be_bytes());
+        note.extend_from_slice(&2u16.to_be_bytes());
+        note.extend_from_slice(&((id.len() + 1) as u32).to_be_bytes());
+        note.extend_from_slice(&32u32.to_be_bytes());
+        note.extend_from_slice(&0u32.to_be_bytes());
+        note.extend_from_slice(id.as_bytes());
+        note.push(0);
+        e.push(Entry {
+            tag: 0x927C,
+            typ: 7,
+            count: note.len() as u32,
+            data: note,
+        });
+    }
     e.push(long(0xA002, shot.w));
     e.push(long(0xA003, shot.h));
     e
@@ -276,6 +294,7 @@ pub struct Mov {
     pub h: u32,
     pub rotated: bool,
     pub millis: u32,
+    pub live_id: Option<&'static str>,
 }
 
 pub fn mov_bytes(m: &Mov) -> Vec<u8> {
@@ -317,6 +336,19 @@ pub fn mov_bytes(m: &Mov) -> Vec<u8> {
         xyz.extend_from_slice(&[0x55, 0xC4]);
         xyz.extend_from_slice(iso.as_bytes());
         moov.extend(boxed(b"udta", &boxed(b"\xA9xyz", &xyz)));
+    }
+    if let Some(id) = m.live_id {
+        let key = b"com.apple.quicktime.content.identifier";
+        let mut keys = vec![0; 4];
+        keys.extend_from_slice(&1u32.to_be_bytes());
+        keys.extend(boxed(b"mdta", key));
+        let mut value = 1u32.to_be_bytes().to_vec();
+        value.extend_from_slice(&0u32.to_be_bytes());
+        value.extend_from_slice(id.as_bytes());
+        let ilst = boxed(&1u32.to_be_bytes(), &boxed(b"data", &value));
+        let mut meta = boxed(b"keys", &keys);
+        meta.extend(boxed(b"ilst", &ilst));
+        moov.extend(boxed(b"meta", &meta));
     }
     let mut ftyp = b"qt  ".to_vec();
     ftyp.extend_from_slice(&[0; 4]);
