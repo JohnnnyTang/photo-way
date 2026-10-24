@@ -95,5 +95,7 @@ describe("formatStat", () => {
     expect(formatStat(undefined)).toBe("");
     expect(formatSpan(45 * 60_000)).toBe("45 min");
     expect(formatSpan(3 * HOUR)).toBe("3 h");
+    expect(formatSpan(85 * HOUR + 40 * 60_000)).toBe("3 d 14 h");
+    expect(formatSpan(48 * HOUR)).toBe("2 d");
   });
 });

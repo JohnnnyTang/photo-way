@@ -133,10 +133,15 @@ export function computeTripStats(points: readonly Item[], suspects: ReadonlySet<
   return { days, total: t };
 }
 
-/** "12 min", "7 h 12 min", "3 h". */
+/** "12 min", "7 h 12 min", "3 h", and from a day on "3 d 14 h". */
 export function formatSpan(ms: number): string {
   const min = Math.round(ms / 60_000);
   if (min < 60) return `${Math.max(1, min)} min`;
+  if (min >= 24 * 60) {
+    const h = Math.round(min / 60);
+    const d = Math.floor(h / 24);
+    return h % 24 ? `${d} d ${h % 24} h` : `${d} d`;
+  }
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m ? `${h} h ${m} min` : `${h} h`;
