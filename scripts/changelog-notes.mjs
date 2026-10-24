@@ -1,6 +1,6 @@
 // Prints the CHANGELOG.md section for a version (Keep a Changelog format) to stdout.
 //   node scripts/changelog-notes.mjs v0.2.0     -> body of "## [0.2.0] - date"
-// Falls back to "## [Unreleased]" (with a note) when the version has no section yet, so dry runs still work.
+// Falls back to "## [Unreleased]" for dry runs. --require rejects a missing release section.
 import { readFileSync } from "node:fs";
 
 const want = (process.argv[2] ?? "").replace(/^v/, "");
@@ -19,6 +19,10 @@ const body = want ? section(want) : null;
 if (body) {
   console.log(body);
 } else {
+  if (process.argv.includes("--require")) {
+    console.error(`CHANGELOG.md has no non-empty section for ${want || "this version"}`);
+    process.exit(1);
+  }
   const unreleased = section("Unreleased");
   console.log(`_No changelog section for ${want || "this build"}; showing Unreleased._\n\n${unreleased ?? ""}`.trim());
 }

@@ -2,6 +2,7 @@
 node_modules/
 dist/
 app/src-tauri/gen/schemas/
+app/src-tauri/release-bundle.config.json
 /fixtures/sample/
 *.log
 .DS_Store

@@ -11,8 +11,6 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-  pull_request: # TEMPORARY dry run, removed before merge
-    paths: [.github/workflows/release.yml, .github/actions/**]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -43,6 +41,7 @@ jobs:
           if [ "${GITHUB_REF_TYPE}" = tag ]; then
             version="${GITHUB_REF_NAME#v}"
             node scripts/version-sync.mjs --check "$version"
+            node scripts/changelog-notes.mjs "$version" --require > /dev/null
             echo "is_tag=true" >> "$GITHUB_OUTPUT"
           else
             node scripts/version-sync.mjs --check
@@ -83,6 +82,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build -w viewer
+      - name: Prepare installer licence resources
+        shell: bash
+        run: |
+          args=()
+          if [ "${{ needs.prepare.outputs.is_tag }}" = true ]; then args+=(--require-lgpl); fi
+          node scripts/release-bundle-config.mjs "${args[@]}"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -110,6 +115,9 @@ jobs:
           for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
             echo "$v=${!v}" >> "$GITHUB_ENV"
           done
+      - name: Ad-hoc signing for unsigned macOS builds
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT != 'true'
+        run: echo 'APPLE_SIGNING_IDENTITY=-' >> "$GITHUB_ENV"
       - name: Enable Windows signing
         if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
         shell: pwsh
@@ -122,19 +130,22 @@ jobs:
           $pw = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
           $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
           Remove-Item $pfx
-          $cfg = @{ bundle = @{ windows = @{
+          "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          $path = "app/src-tauri/release-bundle.config.json"
+          $cfg = Get-Content $path -Raw | ConvertFrom-Json -AsHashtable
+          $cfg.bundle.windows = @{
             certificateThumbprint = $cert.Thumbprint
             digestAlgorithm = "sha256"
             timestampUrl = "http://timestamp.digicert.com"
-          } } } | ConvertTo-Json -Compress -Depth 5
-          "TAURI_CONFIG=$cfg" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          }
+          $cfg | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $path
 
       # ---- desktop app: NSIS + MSI (Windows), universal dmg (macOS) ----
       - name: Build app bundles
         uses: tauri-apps/tauri-action@action-v1.0.0
         with:
           projectPath: app
-          args: ${{ matrix.tauri_args }}
+          args: ${{ matrix.tauri_args }} --config src-tauri/release-bundle.config.json
 
       # ---- CLI ----
       - name: Build CLI
@@ -151,9 +162,26 @@ jobs:
             cargo build --release -p photoway-cli
           fi
 
-      - name: Ad-hoc sign CLI (macOS)
+      - name: Sign CLI (macOS)
         if: runner.os == 'macOS'
-        run: codesign --force --sign - target/universal-apple-darwin/release/photoway
+        run: |
+          if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ "$APPLE_SIGNING_IDENTITY" != - ]; then
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" target/universal-apple-darwin/release/photoway
+          else
+            codesign --force --sign - target/universal-apple-darwin/release/photoway
+          fi
+
+      - name: Sign CLI (Windows)
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
+        shell: pwsh
+        run: |
+          $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+          $signTool = Get-ChildItem $kits -Filter signtool.exe -Recurse -File |
+            Where-Object { $_.DirectoryName -match '[\\/]x64$' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signTool) { throw 'signtool.exe not found in Windows SDK' }
+          & $signTool.FullName sign /sha1 $env:WINDOWS_CERT_THUMBPRINT /tr http://timestamp.digicert.com /td sha256 /fd sha256 target/release/photoway.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # The Windows build links the static CRT and libheif statically: nothing but OS DLLs may be imported.
       # Enabled once Wave 1 · B (libheif, static-CRT build.rs) is in the tree.
@@ -183,6 +211,11 @@ jobs:
             cp target/universal-apple-darwin/release/bundle/dmg/*.dmg "$out/"
           fi
           cp LICENSE stage/
+          if [ "${{ needs.prepare.outputs.is_tag }}" = true ]; then
+            test -s THIRD_PARTY_NOTICES.md
+            test -s licenses/LGPL-3.0.txt
+            test -s licenses/GPL-3.0.txt
+          fi
           [ -f THIRD_PARTY_NOTICES.md ] && cp THIRD_PARTY_NOTICES.md stage/
           [ -d licenses ] && cp -r licenses stage/licenses
           if [ "$RUNNER_OS" = Windows ]; then
@@ -232,7 +265,12 @@ jobs:
           merge-multiple: true
       - name: Licence bundle and checksums
         run: |
-          # THIRD_PARTY_NOTICES.md and licenses/ are generated by Wave 1 · B; attach them when present.
+          if [ "${{ needs.prepare.outputs.is_tag }}" = true ]; then
+            test -s THIRD_PARTY_NOTICES.md
+            test -s licenses/LGPL-3.0.txt
+            test -s licenses/GPL-3.0.txt
+            test -f dist/third-party-sources-${{ needs.prepare.outputs.version }}.tar.gz
+          fi
           [ -f THIRD_PARTY_NOTICES.md ] && cp THIRD_PARTY_NOTICES.md dist/
           [ -d licenses ] && zip -qr dist/licenses.zip licenses
           cd dist
@@ -244,7 +282,10 @@ jobs:
           name: all-release-assets
           path: dist/*
       - name: Release notes from CHANGELOG.md
-        run: node scripts/changelog-notes.mjs "${{ needs.prepare.outputs.version }}" > release-notes.md
+        run: |
+          args=()
+          if [ "${{ needs.prepare.outputs.is_tag }}" = true ]; then args+=(--require); fi
+          node scripts/changelog-notes.mjs "${{ needs.prepare.outputs.version }}" "${args[@]}" > release-notes.md
       - name: Create draft release
         if: needs.prepare.outputs.is_tag == 'true'
         env:
@@ -254,6 +295,7 @@ jobs:
           flags="--draft"
           case "$TAG" in *-*) flags="$flags --prerelease" ;; esac
           if gh release view "$TAG" > /dev/null 2>&1; then
+            [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true ] || { echo "Existing release is published; refusing to replace its assets" >&2; exit 1; }
             gh release upload "$TAG" dist/* --clobber
           else
             gh release create "$TAG" dist/* $flags --title "Photo Way $TAG" --notes-file release-notes.md
