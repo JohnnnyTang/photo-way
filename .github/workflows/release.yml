@@ -1,0 +1,258 @@
+name: Release
+
+# Tag push `vX.Y.Z` builds everything and creates a DRAFT GitHub release. Review and publish it by hand.
+# Run manually (workflow_dispatch) for a dry run: same builds, artifacts only, no release.
+#
+# Optional secrets (signing steps are skipped when they are not set; builds are unsigned then):
+#   macOS:   APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#            APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID   -> sign + notarize the .app/.dmg
+#   Windows: WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD   -> sign NSIS/MSI/exe
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pinned vcpkg tag; see docs/spikes/S1-heic.md. Keep in sync with ci.yml.
+  VCPKG_TAG: "2026.10.16"
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_tag: ${{ steps.v.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+            node scripts/version-sync.mjs --check "$version"
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/version-sync.mjs --check
+            version=$(node -p "require('./package.json').version")
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing version $version"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            rust_targets: x86_64-pc-windows-msvc
+            tauri_args: ""
+            universal: "false"
+          - name: macos-universal
+            os: macos-latest
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            tauri_args: --target universal-apple-darwin
+            universal: "true"
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      # Signing gates: evaluated from secrets, but secrets themselves are only exported when present.
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w viewer
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: ./.github/actions/setup-libheif
+        with:
+          universal: ${{ matrix.universal }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}-${{ hashFiles('vcpkg/triplets/*') }}
+
+      # ---- signing (skipped without secrets) ----
+      - name: Enable macOS signing and notarization
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Exporting to GITHUB_ENV only here keeps unset secrets from reaching tauri as empty variables.
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            echo "$v=${!v}" >> "$GITHUB_ENV"
+          done
+      - name: Enable Windows signing
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "photoway-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $pw = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pw
+          Remove-Item $pfx
+          $cfg = @{ bundle = @{ windows = @{
+            certificateThumbprint = $cert.Thumbprint
+            digestAlgorithm = "sha256"
+            timestampUrl = "http://timestamp.digicert.com"
+          } } } | ConvertTo-Json -Compress -Depth 5
+          "TAURI_CONFIG=$cfg" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # ---- desktop app: NSIS + MSI (Windows), universal dmg (macOS) ----
+      - name: Build app bundles
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        with:
+          projectPath: app
+          args: ${{ matrix.tauri_args }}
+
+      # ---- CLI ----
+      - name: Build CLI
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            cargo build --release -p photoway-cli --target aarch64-apple-darwin
+            cargo build --release -p photoway-cli --target x86_64-apple-darwin
+            mkdir -p target/universal-apple-darwin/release
+            lipo -create -output target/universal-apple-darwin/release/photoway \
+              target/aarch64-apple-darwin/release/photoway target/x86_64-apple-darwin/release/photoway
+            lipo -info target/universal-apple-darwin/release/photoway
+          else
+            cargo build --release -p photoway-cli
+          fi
+
+      - name: Ad-hoc sign CLI (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --sign - target/universal-apple-darwin/release/photoway
+
+      # The Windows build links the static CRT and libheif statically: nothing but OS DLLs may be imported.
+      # Enabled once Wave 1 · B (libheif, static-CRT build.rs) is in the tree.
+      - name: Binary import assertion
+        if: hashFiles('scripts/setup-libheif.sh') != ''
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            node scripts/check-imports.mjs target/release/photoway.exe target/release/photoway-app.exe
+          else
+            node scripts/check-imports.mjs target/universal-apple-darwin/release/photoway target/universal-apple-darwin/release/photoway-app
+          fi
+
+      - name: Size budget (installers)
+        run: node scripts/check-size.mjs --only installer --require
+
+      - name: Package
+        shell: bash
+        run: |
+          out=release-assets
+          mkdir -p "$out" stage
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp target/release/photoway.exe stage/
+            cp target/release/bundle/nsis/*.exe target/release/bundle/msi/*.msi "$out/"
+          else
+            cp target/universal-apple-darwin/release/photoway stage/
+            cp target/universal-apple-darwin/release/bundle/dmg/*.dmg "$out/"
+          fi
+          cp LICENSE stage/
+          [ -f THIRD_PARTY_NOTICES.md ] && cp THIRD_PARTY_NOTICES.md stage/
+          [ -d licenses ] && cp -r licenses stage/licenses
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a -tzip "$out/photoway-cli-$VERSION-windows-x64.zip" ./stage/* > /dev/null
+          else
+            tar -czf "$out/photoway-cli-$VERSION-macos-universal.tar.gz" -C stage .
+          fi
+          ls -la "$out"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  # LGPL-3.0 section 4(d)0: the corresponding source of libheif and libde265 ships with every release.
+  lgpl-sources:
+    name: LGPL source tarball
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node scripts/lgpl-sources.mjs --version "${{ needs.prepare.outputs.version }}" --vcpkg-tag "$VCPKG_TAG" --out release-assets
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-lgpl-sources
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Checksums and draft release
+    needs: [prepare, build, lgpl-sources]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Licence bundle and checksums
+        run: |
+          # THIRD_PARTY_NOTICES.md and licenses/ are generated by Wave 1 · B; attach them when present.
+          [ -f THIRD_PARTY_NOTICES.md ] && cp THIRD_PARTY_NOTICES.md dist/
+          [ -d licenses ] && zip -qr dist/licenses.zip licenses
+          cd dist
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          { echo "### Release assets"; echo '```'; cat SHA256SUMS.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: all-release-assets
+          path: dist/*
+      - name: Release notes from CHANGELOG.md
+        run: node scripts/changelog-notes.mjs "${{ needs.prepare.outputs.version }}" > release-notes.md
+      - name: Create draft release
+        if: needs.prepare.outputs.is_tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags="--draft"
+          case "$TAG" in *-*) flags="$flags --prerelease" ;; esac
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* $flags --title "Photo Way $TAG" --notes-file release-notes.md
+          fi

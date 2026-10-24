@@ -1,0 +1,74 @@
+name: Set up libheif (vcpkg)
+description: >
+  Installs libheif[core] (and libde265) as static libraries with vcpkg, using a binary cache, and exports the
+  environment cargo needs. Windows and macOS only. A no-op until scripts/setup-libheif.{sh,ps1} exist
+  (Wave 1 · B), so workflows stay green on branches that predate it. See docs/spikes/S1-heic.md.
+inputs:
+  universal:
+    description: "macOS only: install both osx triplets (for --target universal-apple-darwin)."
+    default: "false"
+  vcpkg-tag:
+    description: Pinned vcpkg tag.
+    default: "2026.10.16"
+runs:
+  using: composite
+  steps:
+    - name: Detect setup script
+      id: detect
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = Windows ] && [ -f scripts/setup-libheif.ps1 ]; then enabled=true
+        elif [ "$RUNNER_OS" = macOS ] && [ -f scripts/setup-libheif.sh ]; then enabled=true
+        else enabled=false; fi
+        echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+        case "$RUNNER_OS" in
+          Windows) triplets=x64-windows-static-rel ;;
+          macOS) if [ "${{ inputs.universal }}" = true ]; then triplets=arm64-osx-pw+x64-osx-pw; else triplets=arm64-osx-pw; fi ;;
+          *) triplets=none ;;
+        esac
+        echo "triplets=$triplets" >> "$GITHUB_OUTPUT"
+        echo "VCPKG_TAG=${{ inputs.vcpkg-tag }}" >> "$GITHUB_ENV"
+        # runner.temp is not available in job-level env, so these go through GITHUB_ENV.
+        echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+        echo "VCPKG_BINARY_SOURCES=clear;files,$RUNNER_TEMP/vcpkg-bin,readwrite" >> "$GITHUB_ENV"
+        echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+
+    # vcpkg binary cache: one zip per package ABI hash. A hit makes the install step take ~10 s instead of 1-4 min.
+    - name: Restore vcpkg binary cache
+      if: steps.detect.outputs.enabled == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/vcpkg-bin
+        key: vcpkg-${{ runner.os }}-${{ steps.detect.outputs.triplets }}-${{ inputs.vcpkg-tag }}-${{ hashFiles('vcpkg/triplets/*') }}
+
+    - name: Install libheif (macOS)
+      if: steps.detect.outputs.enabled == 'true' && runner.os == 'macOS'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/vcpkg-bin"
+        if [ "${{ inputs.universal }}" = true ]; then bash scripts/setup-libheif.sh --universal; else bash scripts/setup-libheif.sh; fi
+
+    - name: Install libheif (Windows)
+      if: steps.detect.outputs.enabled == 'true' && runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/vcpkg-bin" | Out-Null
+        ./scripts/setup-libheif.ps1
+
+    # Idempotent safety net: make sure cargo can find the libraries even if the setup script did not export them.
+    - name: Export cargo environment
+      if: steps.detect.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = Windows ]; then
+          echo "VCPKGRS_TRIPLET=x64-windows-static-rel" >> "$GITHUB_ENV"
+        else
+          for pair in "aarch64_apple_darwin arm64-osx-pw" "x86_64_apple_darwin x64-osx-pw"; do
+            set -- $pair
+            dir="$VCPKG_ROOT/installed/$2/lib/pkgconfig"
+            [ -d "$dir" ] && echo "PKG_CONFIG_LIBDIR_$1=$dir" >> "$GITHUB_ENV"
+          done
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
+          echo "SYSTEM_DEPS_LIBHEIF_LINK=static" >> "$GITHUB_ENV"
+        fi
+        exit 0
