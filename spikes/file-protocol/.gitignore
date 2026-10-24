@@ -1,0 +1,4 @@
+# generated test pages, thumbnail packs, downloads, browser profiles (34 MB+), see build-pages.mjs / run.mjs
+out/
+out-basemap.geojson
+node_modules/

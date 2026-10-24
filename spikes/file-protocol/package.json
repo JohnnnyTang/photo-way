@@ -1,0 +1,21 @@
+{
+  "name": "spike-file-protocol",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway spike S2: MapLibre from file://, offline basemap, thumb pack, localStorage, save-a-copy",
+  "scripts": {
+    "build": "node build-pages.mjs",
+    "test": "node run.mjs",
+    "table": "node table.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "http-server": "14.1.1",
+    "jpeg-js": "0.4.4",
+    "maplibre-gl": "6.15.0",
+    "maplibre5": "npm:maplibre-gl@5.24.0",
+    "mapshaper": "0.7.98",
+    "topojson-client": "3.1.0",
+    "vite": "8.3.5"
+  }
+}
