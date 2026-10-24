@@ -9,12 +9,13 @@ import { computeSuspects, DEFAULT_OUTLIER_KMH } from "./outliers";
 import { applyEdits, collectEdits, loadEdits, loadPrefs, safeStorage, saveEdits, savePrefs, type Edits } from "./persist";
 import { Player } from "./play";
 import { buildRoute, type RouteResult } from "./route";
+import { computeTripStats, formatStat, type TripStats } from "./stats";
 import { bakeProject, buildCorrections, downloadText, renderCopyHtml, safeFilename } from "./savecopy";
 import { T } from "./strings";
 import { normalizeTheme, readMapColors, resolveTheme, THEME_IDS } from "./themes";
 import { Timeline, type DayState } from "./timeline";
 import { rampAt, timeRamp, tripOrder, tripT, type TripOrder } from "./trip";
-import { clamp, clockOf, formatCoord, formatKm, parseDay } from "./util";
+import { clamp, clockOf, formatCoord, parseDay } from "./util";
 
 export interface MountOptions {
   mode?: "export" | "preview";
@@ -79,7 +80,7 @@ export class App {
   private pops: { btn: HTMLElement; panel: HTMLElement }[] = [];
   private toastTimer = 0;
   private offlineHint = false;
-  private lastDistance = 0;
+  private tripStats: TripStats = computeTripStats([], new Set());
 
   // trip order: colour by time, numbered stops, highlight, playback
   private look: RouteLook = { ...DEFAULT_LOOK };
@@ -339,13 +340,11 @@ export class App {
     const pts = sortByTime(items.filter((i) => i.ts != null));
     const route = buildRoute(pts, this.suspects);
     this.lastRoute = route;
-    this.lastDistance = route.distanceKm;
     // Around a chosen day, the rest of the trip stays on the map, faint, for context.
     let context: RouteContext | null = null;
-    if (this.dayKey && this.look.highlight) {
-      const all = sortByTime(this.items.filter((i) => i.ts != null && this.onMapAnyDay(i)));
-      context = { route: buildRoute(all, this.suspects), day: this.dayKey };
-    }
+    const all = this.dayKey ? sortByTime(this.items.filter((i) => i.ts != null && this.onMapAnyDay(i))) : pts;
+    if (this.dayKey && this.look.highlight) context = { route: buildRoute(all, this.suspects), day: this.dayKey };
+    this.tripStats = computeTripStats(all, this.suspects); // all days, whichever day is chosen
     this.map?.setItems(items);
     this.map?.setRoute(route, this.showRoute, context);
     this.refreshLegend();
@@ -358,7 +357,9 @@ export class App {
     const dayCount = this.groups.filter((g) => g.key !== NO_DAY).length;
     const parts = [shown === total ? T.stats.items(total) : T.stats.shown(shown, total)];
     if (dayCount) parts.push(T.stats.days(dayCount));
-    if (this.lastDistance >= 0.5) parts.push(formatKm(this.lastDistance));
+    // The chosen day's numbers, or the whole trip's.
+    const numbers = formatStat(this.dayKey ? this.tripStats.days.get(this.dayKey) : this.tripStats.total);
+    if (numbers) parts.push(numbers);
     if (this.suspects.size) parts.push(T.stats.outliers(this.suspects.size));
     this.statsEl.textContent = parts.join(" · ");
   }
@@ -904,7 +905,7 @@ export class App {
         "button",
         { type: "button", class: `pw-dayrow${g.key === this.dayKey ? " is-current" : ""}`, role: "menuitem" },
         h("span", { class: "pw-daydot", "data-state": this.dayState(g.key) }),
-        h("span", { class: "pw-daytext" }, label, h("span", { class: "pw-hint" }, T.days.count(this.groupIds(g.key).length))),
+        h("span", { class: "pw-daytext" }, label, h("span", { class: "pw-hint" }, T.days.count(this.groupIds(g.key).length)), h("span", { class: "pw-hint pw-daystat" }, formatStat(this.tripStats.days.get(g.key)))),
         eye,
       );
       row.addEventListener("click", () => {
@@ -974,6 +975,7 @@ export class App {
       items: this.items.length,
       onMap: this.mapItems().length,
       suspects: this.suspects.size,
+      tripStats: { total: this.tripStats.total, days: [...this.tripStats.days.values()] },
       hidden: this.hidden.size,
       edited: this.items.filter((i) => this.isEdited(i.id)).length,
       timelineNodes: this.timeline.renderedCount,
