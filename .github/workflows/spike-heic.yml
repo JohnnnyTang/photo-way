@@ -81,7 +81,7 @@ jobs:
           $bin info
           for f in samples/*.heic; do $bin "$f" "out-$(basename "$f" .heic).jpg" || true; done
 
-  # Fallback (a): libheif[core,libde265] from vcpkg, static triplets, all targets.
+  # Fallback (a): libheif from vcpkg, static triplets, all targets.
   vcpkg:
     needs: sample
     strategy:
@@ -93,7 +93,6 @@ jobs:
           - { os: macos-latest, target: x86_64-apple-darwin, triplet: x64-osx-pw }
     runs-on: ${{ matrix.os }}
     env:
-      VCPKG_ROOT: ${{ runner.temp }}/vcpkg
       VCPKGRS_TRIPLET: ${{ matrix.triplet }}
       PKG_CONFIG_ALLOW_CROSS: "1"
       SYSTEM_DEPS_LIBHEIF_LINK: static
@@ -108,6 +107,7 @@ jobs:
           path: spikes/heic/samples
       - name: tools
         run: |
+          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
           cmake --version | head -1; which pkg-config || brew install pkgconf; which nasm || echo "no nasm (not needed)"
       - name: vcpkg bootstrap
         run: |
@@ -115,10 +115,12 @@ jobs:
           git clone --depth 1 --branch "$VCPKG_TAG" https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
           if [ "$RUNNER_OS" = Windows ]; then "$VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics; else "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics; fi
           echo "::notice::vcpkg bootstrap ${{ matrix.target }}: $(( $(date +%s) - start ))s"
-      - name: vcpkg install libheif[core,libde265]
+      # At vcpkg 2026.10.16, libheif[core] = libheif + libde265 (no GPL x265 encoder,
+      # which the default "hevc" feature would pull in).
+      - name: vcpkg install libheif[core]
         run: |
           start=$(date +%s)
-          "$VCPKG_ROOT/vcpkg" install "libheif[core,libde265]:${{ matrix.triplet }}" --overlay-triplets=triplets --clean-after-build
+          "$VCPKG_ROOT/vcpkg" install "libheif[core]:${{ matrix.triplet }}" --overlay-triplets=triplets --clean-after-build
           t=$(( $(date +%s) - start ))
           echo "::notice::vcpkg install ${{ matrix.target }}: ${t}s"
           echo "VCPKG_SECS=$t" >> "$GITHUB_ENV"
