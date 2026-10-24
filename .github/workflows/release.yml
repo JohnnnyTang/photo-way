@@ -11,6 +11,8 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+  pull_request: # TEMPORARY dry run, removed before merge
+    paths: [.github/workflows/release.yml, .github/actions/**]
 
 concurrency:
   group: release-${{ github.ref }}
