@@ -1,0 +1,210 @@
+# Spike S1 (HEIC decoding) -- throwaway. See docs/spikes/S1-heic.md.
+name: spike-heic
+
+on:
+  push:
+    branches: [spike/heic]
+  workflow_dispatch:
+
+concurrency:
+  group: spike-heic-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  VCPKG_TAG: "2026.10.16"
+  # Universal app minimum; must match the vcpkg overlay triplets.
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
+
+defaults:
+  run:
+    shell: bash
+    working-directory: spikes/heic
+
+jobs:
+  # Make test HEICs from a synthetic 12 MP JPEG (EXIF orientation 6 = rotate 90 CW).
+  sample:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --no-default-features
+      - run: |
+          mkdir -p samples
+          ./target/release/heic-spike gen samples/o6.jpg 6
+          sips -s format heic -s formatOptions 80 samples/o6.jpg --out samples/sips-o6.heic
+          brew install libheif
+          heif-enc --version || true
+          heif-enc -q 80 samples/o6.jpg -o samples/heifenc-o6.heic
+          ls -la samples
+          for f in samples/*.heic; do echo "== $f"; heif-info "$f"; done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: samples
+          path: spikes/heic/samples/*.heic
+
+  # Primary candidate as specified: libheif-sys `embedded-libheif`.
+  embedded:
+    needs: sample
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: samples
+          path: spikes/heic/samples
+      - name: brew libs present on the runner (could be picked up by cmake)
+        if: runner.os == 'macOS'
+        run: brew list --formula | tr '\n' ' '; echo; ls /opt/homebrew/lib | grep -Ei 'de265|aom|dav1d|x265|jpeg|sharpyuv|openjp|webp' || true
+      - name: build (embedded-libheif)
+        run: |
+          start=$(date +%s)
+          cargo build --release --features embedded --target ${{ matrix.target }} -vv 2>&1 | tee build.log | grep -Ei 'warning|error|LIBDE265|Found|Could NOT|-- ' | head -200
+          status=${PIPESTATUS[0]}
+          echo "::notice::embedded ${{ matrix.target }} build exit=$status in $(( $(date +%s) - start ))s"
+          exit $status
+      - name: inspect + run
+        run: |
+          bin=target/${{ matrix.target }}/release/heic-spike
+          ls -la $bin*
+          if [ "$RUNNER_OS" = macOS ]; then otool -L $bin; fi
+          $bin info
+          for f in samples/*.heic; do $bin "$f" "out-$(basename "$f" .heic).jpg" || true; done
+
+  # Fallback (a): libheif[core,libde265] from vcpkg, static triplets, all targets.
+  vcpkg:
+    needs: sample
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, triplet: x64-windows-static-md-rel }
+          - { os: macos-latest, target: aarch64-apple-darwin, triplet: arm64-osx-pw }
+          - { os: macos-latest, target: x86_64-apple-darwin, triplet: x64-osx-pw }
+    runs-on: ${{ matrix.os }}
+    env:
+      VCPKG_ROOT: ${{ runner.temp }}/vcpkg
+      VCPKGRS_TRIPLET: ${{ matrix.triplet }}
+      PKG_CONFIG_ALLOW_CROSS: "1"
+      SYSTEM_DEPS_LIBHEIF_LINK: static
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: samples
+          path: spikes/heic/samples
+      - name: tools
+        run: |
+          cmake --version | head -1; which pkg-config || brew install pkgconf; which nasm || echo "no nasm (not needed)"
+      - name: vcpkg bootstrap
+        run: |
+          start=$(date +%s)
+          git clone --depth 1 --branch "$VCPKG_TAG" https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          if [ "$RUNNER_OS" = Windows ]; then "$VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics; else "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics; fi
+          echo "::notice::vcpkg bootstrap ${{ matrix.target }}: $(( $(date +%s) - start ))s"
+      - name: vcpkg install libheif[core,libde265]
+        run: |
+          start=$(date +%s)
+          "$VCPKG_ROOT/vcpkg" install "libheif[core,libde265]:${{ matrix.triplet }}" --overlay-triplets=triplets --clean-after-build
+          t=$(( $(date +%s) - start ))
+          echo "::notice::vcpkg install ${{ matrix.target }}: ${t}s"
+          echo "VCPKG_SECS=$t" >> "$GITHUB_ENV"
+          "$VCPKG_ROOT/vcpkg" list
+          inst="$VCPKG_ROOT/installed/${{ matrix.triplet }}"
+          ls -la "$inst/lib"
+          cat "$inst"/lib/pkgconfig/*.pc || true
+      - name: pkg-config path (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          var="PKG_CONFIG_PATH_$(echo ${{ matrix.target }} | tr '-' '_')"
+          echo "$var=$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/pkgconfig" >> "$GITHUB_ENV"
+      - name: build baseline (image only)
+        run: |
+          start=$(date +%s)
+          cargo build --release --no-default-features --target ${{ matrix.target }}
+          echo "BASE_SECS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          mkdir -p dist
+          ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
+          cp target/${{ matrix.target }}/release/heic-spike$ext dist/baseline$ext
+          cargo clean
+      - name: build with libheif (clean)
+        run: |
+          start=$(date +%s)
+          cargo build --release --target ${{ matrix.target }} -vv 2>&1 | tee build.log | grep -E 'rustc-link|warning' | head -60
+          status=${PIPESTATUS[0]}
+          echo "HEIC_SECS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          exit $status
+      - name: sizes + linkage
+        run: |
+          ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
+          cp target/${{ matrix.target }}/release/heic-spike$ext dist/heic-spike$ext
+          base=$(wc -c < dist/baseline$ext); heic=$(wc -c < dist/heic-spike$ext)
+          echo "baseline=$base heic=$heic delta=$(( heic - base ))"
+          {
+            echo "### ${{ matrix.target }}"
+            echo "| vcpkg install (s) | baseline build (s) | libheif build (s) | baseline bytes | heic bytes | delta bytes |"
+            echo "|---|---|---|---|---|---|"
+            echo "| $VCPKG_SECS | $BASE_SECS | $HEIC_SECS | $base | $heic | $(( heic - base )) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "BASE_BYTES=$base" >> "$GITHUB_ENV"; echo "HEIC_BYTES=$heic" >> "$GITHUB_ENV"
+          if [ "$RUNNER_OS" = macOS ]; then
+            otool -L dist/heic-spike; lipo -info dist/heic-spike
+            otool -l dist/heic-spike | grep -A4 LC_BUILD_VERSION
+          fi
+      - name: dependents (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          & $dumpbin.FullName /dependents dist\heic-spike.exe
+      - name: run
+        run: |
+          ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
+          bin=dist/heic-spike$ext
+          [ "${{ matrix.target }}" = x86_64-apple-darwin ] && { arch -x86_64 /usr/bin/true && echo "Rosetta OK" || echo "Rosetta missing"; }
+          $bin info
+          for f in samples/*.heic; do
+            echo "== $f"; $bin "$f" "dist/thumb-$(basename "$f" .heic).jpg" | tee -a run.log
+          done
+          ./target/${{ matrix.target }}/release/heic-spike$ext gen dist/o6.jpg 6
+          dist/baseline$ext dist/o6.jpg dist/thumb-o6-jpeg.jpg --expect top-right
+          { echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ matrix.target }}
+          path: |
+            spikes/heic/dist/heic-spike*
+            spikes/heic/dist/thumb-*.jpg
+
+  universal:
+    needs: vcpkg
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: bin-*-apple-darwin
+      - uses: actions/download-artifact@v7
+        with:
+          name: samples
+          path: samples
+      - working-directory: .
+        run: |
+          lipo -create bin-aarch64-apple-darwin/heic-spike bin-x86_64-apple-darwin/heic-spike -output heic-spike-universal
+          chmod +x heic-spike-universal
+          lipo -info heic-spike-universal; ls -la heic-spike-universal
+          ./heic-spike-universal info
+          for f in samples/*.heic; do ./heic-spike-universal "$f" "u-$(basename "$f" .heic).jpg"; arch -x86_64 ./heic-spike-universal "$f" "u64-$(basename "$f" .heic).jpg" || true; done
