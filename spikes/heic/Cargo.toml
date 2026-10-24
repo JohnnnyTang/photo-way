@@ -24,6 +24,9 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 fast_image_resize = "6.1.0"
 libheif-rs = { version = "3.0.0", optional = true, default-features = false, features = ["v1_17"] }
 
+[build-dependencies]
+static_vcruntime = "3.0.0"
+
 # Same release profile as the root workspace, so size numbers are representative.
 [profile.release]
 lto = true

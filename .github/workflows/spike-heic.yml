@@ -91,12 +91,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, triplet: x64-windows-static-md-rel }
-          - { os: macos-latest, target: aarch64-apple-darwin, triplet: arm64-osx-pw }
-          - { os: macos-latest, target: x86_64-apple-darwin, triplet: x64-osx-pw }
+          # /MD libs + Rust default CRT: works, but libheif's C++ pulls in MSVCP140.dll.
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, variant: md, triplet: x64-windows-static-md-rel }
+          # /MT libs + Tauri default (staticVCRuntime: static vcruntime, dynamic UCRT).
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, variant: mt-tauri, triplet: x64-windows-static-rel, svcrt: "1" }
+          # /MT libs + fully static CRT.
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, variant: mt-crtstatic, triplet: x64-windows-static-rel, rustflags: "-C target-feature=+crt-static" }
+          - { os: macos-latest, target: aarch64-apple-darwin, variant: std, triplet: arm64-osx-pw }
+          - { os: macos-latest, target: x86_64-apple-darwin, variant: std, triplet: x64-osx-pw }
+    name: vcpkg (${{ matrix.target }}, ${{ matrix.variant }})
     runs-on: ${{ matrix.os }}
     env:
       VCPKGRS_TRIPLET: ${{ matrix.triplet }}
+      RUSTFLAGS: ${{ matrix.rustflags }}
+      HEIC_SPIKE_STATIC_VCRUNTIME: ${{ matrix.svcrt }}
       PKG_CONFIG_ALLOW_CROSS: "1"
       SYSTEM_DEPS_LIBHEIF_LINK: static
     steps:
@@ -169,8 +177,9 @@ jobs:
           cp target/${{ matrix.target }}/release/heic-spike$ext dist/heic-spike$ext
           base=$(wc -c < dist/baseline$ext); heic=$(wc -c < dist/heic-spike$ext)
           echo "baseline=$base heic=$heic delta=$(( heic - base ))"
+          echo "::notice::${{ matrix.target }}/${{ matrix.variant }}: vcpkg=${VCPKG_SECS}s baseline-build=${BASE_SECS}s heic-build=${HEIC_SECS}s baseline=${base}B heic=${heic}B delta=$(( heic - base ))B"
           {
-            echo "### ${{ matrix.target }}"
+            echo "### ${{ matrix.target }} (${{ matrix.variant }})"
             echo "| vcpkg install (s) | baseline build (s) | libheif build (s) | baseline bytes | heic bytes | delta bytes |"
             echo "|---|---|---|---|---|---|"
             echo "| $VCPKG_SECS | $BASE_SECS | $HEIC_SECS | $base | $heic | $(( heic - base )) |"
@@ -186,7 +195,8 @@ jobs:
         run: |
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
           $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
-          & $dumpbin.FullName /dependents dist\heic-spike.exe
+          "--- baseline"; & $dumpbin.FullName /dependents dist\baseline.exe | Select-String "\.dll"
+          "--- heic-spike"; & $dumpbin.FullName /dependents dist\heic-spike.exe | Select-String "\.dll"
       - name: run
         run: |
           ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
@@ -194,14 +204,14 @@ jobs:
           [ "${{ matrix.target }}" = x86_64-apple-darwin ] && { arch -x86_64 /usr/bin/true && echo "Rosetta OK" || echo "Rosetta missing"; }
           $bin info
           for f in samples/*.heic; do
-            echo "== $f"; $bin "$f" "dist/thumb-$(basename "$f" .heic).jpg" | tee -a run.log
+            echo "== $f"; $bin "$f" "dist/thumb-$(basename "$f" .heic).jpg" --expect top-right | tee -a run.log
           done
           ./target/${{ matrix.target }}/release/heic-spike$ext gen dist/o6.jpg 6
           dist/baseline$ext dist/o6.jpg dist/thumb-o6-jpeg.jpg --expect top-right
           { echo '```'; cat run.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
-          name: bin-${{ matrix.target }}
+          name: bin-${{ matrix.target }}-${{ matrix.variant }}
           path: |
             spikes/heic/dist/heic-spike*
             spikes/heic/dist/thumb-*.jpg
@@ -212,15 +222,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v7
         with:
-          pattern: bin-*-apple-darwin
+          pattern: bin-*-apple-darwin-std
       - uses: actions/download-artifact@v7
         with:
           name: samples
           path: samples
       - working-directory: .
         run: |
-          lipo -create bin-aarch64-apple-darwin/heic-spike bin-x86_64-apple-darwin/heic-spike -output heic-spike-universal
+          lipo -create bin-aarch64-apple-darwin-std/heic-spike bin-x86_64-apple-darwin-std/heic-spike -output heic-spike-universal
           chmod +x heic-spike-universal
           lipo -info heic-spike-universal; ls -la heic-spike-universal
           ./heic-spike-universal info
-          for f in samples/*.heic; do ./heic-spike-universal "$f" "u-$(basename "$f" .heic).jpg"; arch -x86_64 ./heic-spike-universal "$f" "u64-$(basename "$f" .heic).jpg" || true; done
+          for f in samples/*.heic; do ./heic-spike-universal "$f" "u-$(basename "$f" .heic).jpg" --expect top-right; arch -x86_64 ./heic-spike-universal "$f" "u64-$(basename "$f" .heic).jpg" --expect top-right; done

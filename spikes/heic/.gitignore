@@ -1,4 +1,4 @@
 target/
-Cargo.lock.bak
+target-*/
 *.heic
 *.jpg
