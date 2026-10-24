@@ -146,10 +146,11 @@ jobs:
           inst="$VCPKG_ROOT/installed/${{ matrix.triplet }}"
           ls -la "$inst/lib"
           cat "$inst"/lib/pkgconfig/*.pc || true
-      - name: pkg-config path (macOS)
+      # LIBDIR (not PATH) replaces the default search dirs, so Homebrew .pc files can't leak in.
+      - name: pkg-config libdir (macOS)
         if: runner.os == 'macOS'
         run: |
-          var="PKG_CONFIG_PATH_$(echo ${{ matrix.target }} | tr '-' '_')"
+          var="PKG_CONFIG_LIBDIR_$(echo ${{ matrix.target }} | tr '-' '_')"
           echo "$var=$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: build baseline (image only)
         run: |
