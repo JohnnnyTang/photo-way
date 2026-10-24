@@ -131,11 +131,64 @@ jobs:
           path: cli-out
           if-no-files-found: error
 
+  # Wave 2 · G: the photoway CLI builds html/dir/zip outputs, then Playwright (Chromium, Firefox, WebKit) opens each
+  # from file:// and over HTTP (`photoway serve`), plus perf and output size gates. See docs/WAVE2_GATE.md.
+  e2e:
+    name: E2E (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # TODO(Wave 2 · E): uncomment once the photoway CLI (build/serve/bundle writers) has merged, so the suite can
+      # no longer fall back to the viewer reference layouts. Until then the fallback keeps main green.
+      # PW_E2E_REQUIRE_CLI: "1"
+      PW_CLI: ${{ github.workspace }}/target/release/photoway${{ runner.os == 'Windows' && '.exe' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w viewer
+      - run: npm run fixtures
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-libheif
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('vcpkg/triplets/*') }}
+      - name: Build CLI (release)
+        run: cargo build --release -p photoway-cli
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+        working-directory: viewer
+      - name: End-to-end outputs, perf and size (Playwright)
+        run: npx playwright test
+        working-directory: viewer
+      - name: Output size budgets
+        shell: bash
+        run: |
+          ids=shell,output-html,output-dir
+          [ "$PW_E2E_REQUIRE_CLI" = 1 ] && ids="$ids,output-zip"
+          node scripts/check-size.mjs --only "$ids" --require
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report-${{ runner.os }}
+          path: |
+            viewer/playwright-report
+            viewer/test-results
+          if-no-files-found: ignore
+
   # Single stable name for branch protection: require "CI OK" and nothing else.
   ci-ok:
     name: CI OK
     if: always()
-    needs: [viewer, rust]
+    needs: [viewer, rust, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs succeeded
