@@ -7,3 +7,4 @@ app/src-tauri/gen/schemas/
 .DS_Store
 Thumbs.db
 /out/
+.claude/
