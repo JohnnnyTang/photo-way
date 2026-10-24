@@ -51,7 +51,8 @@ All options are listed in the [CLI reference](docs/USER_GUIDE.md#command-line-re
 
 - A route on a map with direction arrows, start and end markers, and clustered photo pins that
   turn into thumbnails as you zoom in.
-- A timeline with day navigation, a photo and video viewer, Live Photo and video support.
+- A timeline with day navigation, distance, climb and time for each day and the whole trip, a photo and
+  video viewer, Live Photo and video support.
 - Basemaps: an offline world map that always works, plus satellite, topographic, street and
   **3D terrain** when you are online. Themes: auto, light, dark, dusk, paper, forest.
 - GPS glitch filter, drag-a-pin to fix a wrong location, hide items, export your corrections, and
