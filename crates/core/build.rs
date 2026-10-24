@@ -12,6 +12,7 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    check_viewer_dist();
     let target = env::var("TARGET").unwrap_or_default();
     // The /MT vcpkg libs meet the default /MD Rust CRT in core's own test and bench binaries
     // (the CLI and app link the static VC runtime instead). The mix works; silence the notice.
@@ -32,5 +33,18 @@ fn main() {
         );
         println!("cargo:rustc-link-search=native={}", dir.display());
         println!("cargo:rustc-link-lib=static=clang_rt.osx");
+    }
+}
+
+/// `src/assets.rs` embeds the viewer build; fail with a clear message instead of a bare include error.
+fn check_viewer_dist() {
+    let dist = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../viewer/dist");
+    for name in ["viewer.js", "viewer.css", "template.html", "world.topo.json"] {
+        let file = dist.join(name);
+        println!("cargo:rerun-if-changed={}", file.display());
+        assert!(
+            file.exists(),
+            "viewer/dist/{name} is missing: run `npm ci && npm run build -w viewer` before building the Rust crates"
+        );
     }
 }

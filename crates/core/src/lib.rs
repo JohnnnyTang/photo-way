@@ -7,7 +7,9 @@
 //! - [`media`]  — decoding, thumbnails, web-size images  (Wave 1 · B)
 //! - [`bundle`] — Html / Dir / Zip writers               (Wave 2 · E)
 //! - [`serve`]  — local static server                    (Wave 2 · E)
+//! - [`assets`] — viewer build output embedded in the binary
 
+pub mod assets;
 pub mod bundle;
 pub mod media;
 pub mod meta;

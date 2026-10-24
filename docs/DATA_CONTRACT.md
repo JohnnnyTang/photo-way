@@ -167,11 +167,26 @@ would point at the wrong items after renumbering).
 
 Theme ids: `auto` (follows `prefers-color-scheme`, maps to `light`/`dark`), `light`, `dark`, `dusk`, `paper`, `forest`. Implemented as CSS custom-property sets on `[data-theme]`. Unknown id → `auto`.
 
-## 6. Rust core API (shape, Wave 1/2 fill it in)
+## 6. Rust core API (frozen for Wave 2; stubs in `crates/core/src/{bundle,serve,assets}.rs`)
 
 ```rust
-pub fn scan(inputs: &[PathBuf], opts: &ScanOptions) -> Result<ScanReport>;
-pub fn process(report: &ScanReport, opts: &MediaOptions, progress: &dyn Progress) -> Result<Prepared>;
-pub fn write(prepared: &Prepared, project: &Project, format: Format, out: &Path) -> Result<WriteReport>;
-pub fn serve(path: &Path, addr: SocketAddr) -> Result<ServerHandle>;  // dir | zip | html
+scan::scan(inputs: &[PathBuf], opts: &ScanOptions, progress: &dyn Progress) -> Result<ScanReport>;
+media::process(report: &ScanReport, opts: &MediaOptions, progress: &dyn Progress) -> Result<Prepared>;
+bundle::project(report: &ScanReport, prepared: &Prepared, opts: &ExportOptions) -> Project; // bundle-layout refs
+bundle::asset_for_ref(prepared: &Prepared, project: &Project, rel: &str) -> Option<&Asset>;  // app preview
+bundle::estimate(prepared: &Prepared, project: &Project, format: Format, opts: &ExportOptions) -> u64;
+bundle::write(prepared, project, format, out: &Path, opts: &ExportOptions, progress) -> Result<WriteReport>;
+serve::serve(path: &Path, addr: SocketAddr) -> Result<ServerHandle>;  // dir | zip | html; .url() .stop() .wait()
+assets::{VIEWER_JS, VIEWER_CSS, TEMPLATE_HTML, BASEMAP_JSON}: &[u8]   // viewer/dist, embedded
 ```
+
+## 7. CLI (frozen for Wave 2; flags in `crates/cli/src/main.rs`)
+
+```
+photoway build <inputs>... -o <out> [--format html|dir|zip] [--title T] [--full none|web|original]
+               [--web-edge 2048] [--no-video] [--keep-exif] [--coord-decimals N] [--cache DIR]
+               [--theme ID] [--basemap ID]
+photoway serve <dir|zip|html> [--addr 127.0.0.1:8765]   # first stdout line: "Serving <path> at <url>"; port 0 = any
+photoway inspect <inputs>... [--json]                   # {"entries":[...],"skipped":[{"path","reason"}]}
+```
+Exit code 0 on success, non-zero with a one-line `error: …` on stderr otherwise.
