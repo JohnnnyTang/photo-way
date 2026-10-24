@@ -258,8 +258,75 @@ fn bad_inputs_are_errors() {
     assert!(serve::serve(&out, first.addr).is_err(), "port in use");
 }
 
-/// tiny_http closes its listener on its own accept thread after the server is dropped, so the
-/// port stops accepting shortly after `stop()`/drop return rather than at the same instant.
+/// Reads one response off a keep-alive connection, framed by its Content-Length.
+fn read_framed(s: &mut TcpStream) -> (u16, Vec<u8>) {
+    let mut raw = Vec::new();
+    let mut byte = [0u8; 1];
+    while !raw.ends_with(&[13, 10, 13, 10]) {
+        assert_eq!(s.read(&mut byte).unwrap(), 1, "connection closed mid-head");
+        raw.push(byte[0]);
+    }
+    let head = String::from_utf8_lossy(&raw).into_owned();
+    let status = head.split(' ').nth(1).unwrap().parse().unwrap();
+    let len: usize = head
+        .lines()
+        .find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            k.eq_ignore_ascii_case("content-length")
+                .then(|| v.trim().parse().unwrap())
+        })
+        .expect("content-length");
+    let mut body = vec![0; len];
+    s.read_exact(&mut body).unwrap();
+    (status, body)
+}
+
+/// A browser keeps several keep-alive connections open; a request on any of them, or on a new
+/// one, must still be answered. (tiny_http's worker pool could leave one waiting indefinitely.)
+#[test]
+fn many_open_keep_alive_connections_are_all_answered() {
+    let f = fixture(1, FullSize::None);
+    let out = export(&f, Format::Dir, "site");
+    let (cr, lf) = (char::from(13u8), char::from(10u8));
+    let req = |target: &str| format!("GET {target} HTTP/1.1{cr}{lf}Host: localhost{cr}{lf}{cr}{lf}");
+    let thumb = format!("/{}", f.project.items[0].thumb);
+    for _ in 0..10 {
+        let h = serve::serve(&out, any_port()).unwrap();
+        let idle: Vec<TcpStream> = (0..8).map(|_| TcpStream::connect(h.addr).unwrap()).collect();
+        let mut conns: Vec<TcpStream> = (0..12).map(|_| TcpStream::connect(h.addr).unwrap()).collect();
+        for s in &mut conns {
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            s.write_all(req(&thumb).as_bytes()).unwrap();
+        }
+        for s in &mut conns {
+            assert_eq!(read_framed(s), (200, f.prepared.rendered[0].thumb_jpeg.clone()));
+        }
+        // The same connections serve a second request each (keep-alive).
+        for s in &mut conns {
+            s.write_all(req("/data.js").as_bytes()).unwrap();
+            let (status, body) = read_framed(s);
+            assert_eq!(status, 200);
+            assert!(body.starts_with(b"window.__PHOTOWAY__"));
+        }
+        drop(idle);
+        h.stop();
+    }
+}
+
+#[test]
+fn head_reports_the_length_without_a_body() {
+    let f = fixture(1, FullSize::None);
+    let out = export(&f, Format::Html, "page.html");
+    let h = serve::serve(&out, any_port()).unwrap();
+    let r = request(h.addr, "HEAD", "/", &[]);
+    assert_eq!(r.status, 200);
+    assert!(r.body.is_empty());
+    let len = std::fs::metadata(&out).unwrap().len().to_string();
+    assert_eq!(r.header("content-length").as_deref(), Some(len.as_str()));
+}
+
+/// The listener closes on the accept thread, which `stop()`/drop join, but connecting can still
+/// race the OS releasing the socket, so this polls briefly.
 fn port_closes(addr: SocketAddr) -> bool {
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {

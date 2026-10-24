@@ -59,7 +59,10 @@ for (const output of outputs) {
             if (imgs.length === 0) return ["no visible thumbnails"];
             return imgs.filter((i) => !(i.complete && i.naturalWidth > 0)).map((i) => `${i.src.slice(0, 80)} complete=${i.complete} width=${i.naturalWidth}`);
           });
-        await expect.poll(badImages, { message: `thumbnails (responses: ${JSON.stringify(responses)})` }).toEqual([]);
+        // `responses` is read after the poll gives up, so it lists the failures seen while waiting.
+        await expect.poll(badImages, { message: "visible thumbnails load" }).toEqual([]).catch((e: Error) => {
+          throw new Error(`${e.message} | failed responses: ${JSON.stringify(responses)}`);
+        });
         expect(errors).toEqual([]);
       });
 

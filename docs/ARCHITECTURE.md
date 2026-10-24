@@ -13,7 +13,7 @@
      media  → decode (image + libheif), thumbs, web-size, cache (Wave 1 · B)
      model  → Project / Item = DATA_CONTRACT v1               (Wave 0, frozen)
      bundle → Html | Dir | Zip writers, template injection    (Wave 2 · E)
-     serve  → tiny_http static server for dir | zip | html    (Wave 2 · E)
+     serve  → std-only HTTP/1.1 static server for dir | zip | html    (Wave 2 · E)
                 │ embeds viewer/dist/* via include_bytes!
                 ▼
    viewer (TS + MapLibre, IIFE)                               (Wave 1 · C)

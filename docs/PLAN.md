@@ -60,7 +60,7 @@ Phone apps; cloud upload/hosting; editing photos; reading the Photos.app/Google 
 | D8 | Viewer build | **TypeScript + Vite → one classic IIFE `viewer.js` + `viewer.css`** | Chrome blocks `type="module"` on `file://`. Output is embedded into the Rust binary (`include_bytes!`), so the app carries everything. |
 | D9 | Data in output | `<script id="pw-data" type="application/json">` (single HTML) / `data.js` setting `window.__PHOTOWAY__` (bundle) | Script tags load from `file://`; fetch doesn't. Thumbnails in single HTML: base64 pack + offset table, decoded lazily to Blob URLs (the original version crashed browsers when it embedded data for ~1,700 photos). |
 | D10 | Scale | Map: clustered GeoJSON source + DOM thumbnail markers only for in-viewport leaves (≤ ~150); timeline: virtualized | Smooth at 5,000 items. |
-| D11 | Server | `tiny_http` static server in core (`photoway serve dir|zip|html`, the app's "Serve" button); also serves straight from a zip | Small, no runtime. |
+| D11 | Server | Std-only HTTP/1.1 static server in core, one thread per connection (`photoway serve dir|zip|html`, the app's "Serve" button); also serves straight from a zip | Small, no runtime. (Replaced `tiny_http` in Wave 2 · G: its worker pool could starve a new connection behind idle keep-alive ones.) |
 | D12 | Repo/CI | Public GitHub repo, Cargo workspace + npm viewer, GitHub Actions; releases via `tauri-action` | Windows `.msi`/NSIS `.exe` + portable zip; macOS universal `.dmg`; CLI binaries for both. Unsigned at first (with documented Gatekeeper/SmartScreen steps); signing/notarization slots wired to secrets for later. |
 
 ### 2.1 Size budgets (enforced in CI)
