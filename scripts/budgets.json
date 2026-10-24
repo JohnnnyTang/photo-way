@@ -1,0 +1,35 @@
+{
+  "_comment": "Size budgets from docs/PLAN.md section 2.1. KB = 1024 bytes, MB = 1048576 bytes (the plan measured the basemap at 581 KB = 594.7 kB). Globs are relative to the repo root. A budget whose globs match nothing is skipped unless --require is passed.",
+  "budgets": [
+    {
+      "id": "viewer",
+      "label": "Viewer JS+CSS (minified, incl. MapLibre)",
+      "globs": ["viewer/dist/*.js", "viewer/dist/*.css"],
+      "maxBytes": 1887437,
+      "maxGzipBytes": 491520
+    },
+    {
+      "id": "basemap",
+      "label": "Offline basemap (Natural Earth TopoJSON)",
+      "globs": ["viewer/basemap/world.topo.json"],
+      "maxBytes": 614400
+    },
+    {
+      "id": "shell",
+      "label": "Empty single-HTML shell (viewer + basemap)",
+      "globs": ["target/size-check/empty-shell.html"],
+      "maxBytes": 2726297
+    },
+    {
+      "id": "installer",
+      "label": "Installers (each file)",
+      "globs": [
+        "target/**/release/bundle/nsis/*.exe",
+        "target/**/release/bundle/msi/*.msi",
+        "target/**/release/bundle/dmg/*.dmg"
+      ],
+      "each": true,
+      "maxBytes": 15728640
+    }
+  ]
+}
