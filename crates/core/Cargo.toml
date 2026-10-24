@@ -13,3 +13,8 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
+
+# Wave 1 · A (metadata)
+nom-exif = "3.8"
+rayon = "1.10"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
