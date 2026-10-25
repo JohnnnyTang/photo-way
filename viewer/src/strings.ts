@@ -1,5 +1,5 @@
 /** Every user-visible English string lives here, so localisation stays possible later. */
-export const T = {
+export const EN = {
   appName: "Photo Way",
   loadError: "This file does not contain any trip data.",
   noItems: "This trip has no photos or videos yet.",
@@ -91,6 +91,7 @@ export const T = {
   },
 
   menu: {
+    language: "Language / 语言",
     exportCorrections: "Export corrections",
     exportCorrectionsHint: "Download your location fixes and hidden items as JSON",
     saveCopy: "Save a copy",
@@ -160,6 +161,9 @@ export const T = {
   cluster: { zoom: "Zoom in" },
   start: "Start",
   end: "End",
-} as const;
+};
 
-export type Strings = typeof T;
+export type Strings = typeof EN;
+/** Live binding read by viewer modules when labels are rendered. */
+export let T: Strings = EN;
+export function setViewerStrings(strings: Strings): void { T = strings; }

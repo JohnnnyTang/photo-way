@@ -30,6 +30,8 @@ export interface ProjectOptions {
   theme?: string;
   basemap?: Basemap;
   outlierSpeedKmh?: number;
+  /** Absent in older exports. An unsupported explicit value falls back to English. */
+  lang?: string;
 }
 
 export interface Project {

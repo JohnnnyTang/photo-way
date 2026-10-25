@@ -77,6 +77,19 @@ for (const output of outputs) {
         expect(errors).toEqual([]);
       });
 
+      test("language switches in an actual export and stays with this project", async ({ page, manifest, servers }) => {
+        await open(page, manifest, servers);
+        const project = await projectOf(page);
+        await page.getByRole("button", { name: "More" }).click();
+        await page.locator('.pw-language-opt[lang="zh-CN"]').click();
+        await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+        await expect(page.getByRole("button", { name: "筛选" })).toBeVisible();
+        expect(await page.evaluate((id) => localStorage.getItem(`photoway:${id}:language`), project.id)).toBe("zh-CN");
+        await page.reload();
+        await waitReady(page);
+        await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+      });
+
       test("a visibility edit persists across reload, keyed by the bundle id", async ({ page, manifest, servers, errors }) => {
         await open(page, manifest, servers);
         const project = await projectOf(page);
@@ -108,6 +121,8 @@ for (const output of outputs) {
           await expect.poll(async () => (await statsOf(page)).hidden).toBe(1);
 
           await page.getByRole("button", { name: "More" }).click();
+          await page.locator('.pw-language-opt[lang="zh-CN"]').click();
+          await page.getByRole("button", { name: "更多" }).click();
           await page.locator(".pw-copyitem").click();
           // With a single item, dropping it would leave an empty copy: keep it flagged instead.
           const keepHidden = total < 2;
@@ -122,6 +137,8 @@ for (const output of outputs) {
           await copy.goto(toFileUrl(copyPath));
           await waitReady(copy);
           const baked = await projectOf(copy);
+          expect(baked.options?.lang).toBe("zh-CN");
+          await expect(copy.locator("html")).toHaveAttribute("lang", "zh-CN");
           expect(baked.id).not.toBe(project.id);
           expect(baked.items.every((it, i) => it.id === i)).toBe(true);
           if (keepHidden) {

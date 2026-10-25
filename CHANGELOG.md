@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-24
+
+### English
+
+- Add English and Simplified Chinese controls to the desktop app and exported viewer. The app remembers its language and offers an independent export language; the viewer remembers a choice for each trip.
+- Include both languages in HTML, folder, and ZIP exports. Language switching works offline, and Save a copy embeds the selected language alongside edits.
+- Add `photoway build --lang en|zh-CN`, bilingual README and user guides, a multilingual Windows setup, and separate English and Simplified Chinese MSI installers.
+- Keep older project files and settings compatible. Existing exported files retain their embedded viewer; create a new export for bilingual controls.
+
+### 简体中文
+
+- 桌面应用和导出地图新增英语、简体中文界面。应用会记住界面语言，导出语言可单独选择；地图会按旅程保存语言选择。
+- HTML、文件夹和 ZIP 导出均包含双语界面。离线时仍可切换语言；“保存副本”会同时保留所选语言和编辑内容。
+- 命令行新增 `photoway build --lang en|zh-CN`，并提供中英文自述文件与使用指南。Windows 提供双语安装程序及英文、简体中文 MSI 安装包。
+- 兼容旧项目和设置。已导出的旧文件仍使用原有地图界面；重新导出后即可使用双语功能。
+
 ## [0.1.1] - 2026-10-24
 
 ### Added

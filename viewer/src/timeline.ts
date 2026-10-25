@@ -2,7 +2,8 @@ import type { Row } from "./days";
 import { h, icon, ICONS } from "./dom";
 import type { Item } from "./model";
 import { T } from "./strings";
-import { clockOf, formatDuration, parseDay } from "./util";
+import { clockOf, formatDuration, formatViewerDay, parseDay } from "./util";
+import type { Locale } from "../../shared/locale";
 
 export type DayState = "all" | "some" | "none";
 
@@ -163,6 +164,12 @@ export class Timeline {
     });
   }
 
+  refreshLanguage(): void {
+    this.empty.textContent = T.timeline.empty;
+    this.scroller.setAttribute("aria-label", T.timeline.label);
+    this.setRows(this.rows);
+  }
+
   private update(row: Row, node: HTMLElement): void {
     if (row.kind === "day") {
       const state = this.host.dayState(row.key);
@@ -214,7 +221,7 @@ export class Timeline {
       "div",
       { class: "pw-tl-day", role: "listitem", tabindex: "0", "data-key": key },
       h("div", { class: "pw-tl-daynum" }, p ? String(p.day) : "?"),
-      h("div", { class: "pw-tl-daymon" }, p ? `${p.monthName} ${p.year}` : T.days.none),
+      h("div", { class: "pw-tl-daymon" }, p ? formatViewerDay(key, document.documentElement.lang as Locale, "month") : T.days.none),
       h("div", { class: "pw-tl-daywd" }, p ? p.weekday : ""),
       h("div", { class: "pw-tl-daycount" }, ""),
       eye,

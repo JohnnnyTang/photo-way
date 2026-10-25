@@ -1,5 +1,7 @@
 # Photo Way user guide
 
+[简体中文](USER_GUIDE.zh-CN.md) · [Project README](../README.md)
+
 Photo Way turns photos and videos that carry a GPS location into a route map you can open in any browser.
 This guide covers installing, getting the right files off your phone, using the app and the exported map,
 sharing safely, the command line, and fixing problems.
@@ -249,6 +251,12 @@ photoway build ~/Pictures/iphone-trip -o trip.zip --format zip --full original -
 photoway build ~/Pictures/iphone-trip -o trip-dir --format dir --theme dark --basemap offline
 photoway serve trip-dir
 ```
+
+## Languages in v0.2.0
+
+The desktop **Language / 语言** setting offers **System**, **English**, and **简体中文**. A separate export-language choice sets the initial language of a new export. Its recipient can switch between English and Simplified Chinese in the viewer; the choice is saved for that trip when browser storage is available. Switching languages does not translate photo titles or filenames. Existing v0.1.x exports keep their original embedded viewer; create a new export to gain bilingual controls. Operating system file picker labels and third-party map labels may follow their own language settings.
+
+Installer language only controls installer text. It does not set the app's saved language preference. Both Windows MSI variants contain the same bilingual app; the NSIS setup includes a language selector.
 
 ## Troubleshooting
 

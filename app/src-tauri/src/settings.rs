@@ -26,6 +26,10 @@ pub struct Settings {
     pub theme: String,
     /// `html`, `dir` or `zip`.
     pub format: String,
+    /// `system`, `en`, or `zh-CN`. Old settings default to `system`.
+    pub language: String,
+    /// Independent concrete export choice. `None` means it has not been chosen yet.
+    pub export_language: Option<String>,
 }
 
 impl Default for Settings {
@@ -40,11 +44,22 @@ impl Default for Settings {
             basemap: "auto".into(),
             theme: "auto".into(),
             format: "html".into(),
+            language: "system".into(),
+            export_language: None,
         }
     }
 }
 
 impl Settings {
+    pub fn resolved_export_language(&self, app_locale: &str) -> &'static str {
+        match self.export_language.as_deref() {
+            Some("zh-CN") => "zh-CN",
+            Some("en") => "en",
+            _ if app_locale == "zh-CN" => "zh-CN",
+            _ => "en",
+        }
+    }
+
     pub fn full_size(&self) -> FullSize {
         match self.full.as_str() {
             "none" => FullSize::None,
@@ -82,6 +97,7 @@ impl Settings {
             options: ProjectOptions {
                 theme,
                 basemap: self.basemap_id(),
+                lang: Some(self.resolved_export_language(&self.language).into()),
                 ..ProjectOptions::default()
             },
             coord_decimals: self.coord_decimals.map(|d| d.min(10)),
@@ -134,6 +150,8 @@ mod tests {
         assert_eq!(s.title, "T");
         assert_eq!(s.web_edge, 2048);
         assert!(s.strip_exif);
+        assert_eq!(s.language, "system");
+        assert_eq!(s.export_language, None);
     }
 
     #[test]
@@ -157,5 +175,20 @@ mod tests {
             ..Settings::default()
         };
         assert_eq!(bad.basemap_id(), Basemap::Auto);
+    }
+
+    #[test]
+    fn export_language_is_independent_and_invalid_values_fall_back() {
+        let mut s = Settings {
+            language: "zh-CN".into(),
+            ..Settings::default()
+        };
+        assert_eq!(s.resolved_export_language("zh-CN"), "zh-CN");
+        assert_eq!(s.export_options().options.lang.as_deref(), Some("zh-CN"));
+        s.export_language = Some("en".into());
+        assert_eq!(s.resolved_export_language("zh-CN"), "en");
+        assert_eq!(s.export_options().options.lang.as_deref(), Some("en"));
+        s.export_language = Some("unsupported".into());
+        assert_eq!(s.resolved_export_language("zh-CN"), "zh-CN");
     }
 }

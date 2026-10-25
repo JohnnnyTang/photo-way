@@ -1,5 +1,7 @@
 # Photo Way
 
+[简体中文](README.zh-CN.md) · [English user guide](docs/USER_GUIDE.md) · [中文使用指南](docs/USER_GUIDE.zh-CN.md)
+
 Turn a pile of geotagged phone photos into a **portable route map**: one `.html` file
 (or a small zip) that opens by double-click, works offline, and can be shared without the app.
 
@@ -8,6 +10,8 @@ Turn a pile of geotagged phone photos into a **portable route map**: one `.html`
 Photo Way is a small desktop app for Windows and macOS, plus a `photoway` command line tool.
 You drop in photos and videos from your phone, check the preview, and export. Everything
 runs on your computer; nothing is uploaded.
+
+English and Simplified Chinese support is included in v0.2.0. See the [Wave 4 plan](docs/WAVE4_PLAN.md) and [development roadmap](docs/PLAN.md).
 
 The screenshots use a synthetic sample trip.
 
@@ -18,7 +22,7 @@ Get the latest version from the
 
 | You use | Download |
 |---|---|
-| Windows | the NSIS installer (`.exe`) or the `.msi` |
+| Windows | the NSIS installer (`.exe`) or the `.msi`; from v0.2.0, choose an English or Simplified Chinese MSI |
 | macOS (Apple silicon and Intel) | the universal `.dmg` |
 | Command line only | `photoway-cli-<version>-windows-x64.zip` or `photoway-cli-<version>-macos-universal.tar.gz` |
 
@@ -99,6 +103,19 @@ cargo test --workspace
 | `viewer/` | The exported map viewer (TypeScript + MapLibre) |
 | `schema/`, `docs/DATA_CONTRACT.md` | Project data format |
 | `legacy/` | The original macOS export script and Cesium generator (reference) |
+
+## Development
+
+Requirements: Rust (stable), Node.js 24+. On Windows, the Visual Studio C++ build tools.
+
+```sh
+npm ci
+npm run fixtures          # synthetic sample data → fixtures/sample/
+npm run build:viewer      # viewer/dist
+npm run dev:viewer        # viewer dev server on the sample data
+cargo test --workspace
+npm run tauri dev -w app  # desktop app
+```
 
 `node scripts/screenshots.mjs` regenerates the images in `docs/img/`.
 

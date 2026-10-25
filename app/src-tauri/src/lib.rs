@@ -57,7 +57,7 @@ pub fn run() {
             respond(ctx.app_handle().clone(), request, responder);
         })
         .setup(|app| {
-            let menu = menu::build(app.handle())?;
+            let menu = menu::build(app.handle(), "en")?;
             app.set_menu(menu)?;
             Ok(())
         })
@@ -66,6 +66,7 @@ pub fn run() {
             commands::app_info,
             commands::get_settings,
             commands::save_settings,
+            commands::set_menu_language,
             commands::cancel,
             commands::reset,
             commands::scan,

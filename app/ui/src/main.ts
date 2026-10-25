@@ -15,7 +15,12 @@ import {
   type Summary,
 } from "./api";
 import { capturePosters, setProtocolBase } from "./poster";
-import { S } from "./strings";
+import { appStrings } from "./catalog";
+import { formatCount, formatDay, resolveAppLocale, resolveExportLocale, type Locale } from "../../../shared/locale";
+import { message as localizedMessage, type MessageCode } from "../../../shared/messages";
+
+let locale: Locale = resolveAppLocale("system", navigator.language);
+let S = appStrings(locale);
 
 const BIG_HTML_BYTES = 50 * 1024 * 1024;
 const MEDIA_EXTS = ["jpg", "jpeg", "heic", "heif", "png", "tif", "tiff", "dng", "mov", "mp4", "m4v"];
@@ -56,6 +61,8 @@ const m: Model = {
     basemap: "auto",
     theme: "auto",
     format: "html",
+    language: "system",
+    exportLanguage: null,
   },
   summary: null,
   built: null,
@@ -82,6 +89,46 @@ function message(text: string | null) {
   show(el, !!text);
 }
 
+function operationError(e: unknown): string {
+  const raw = errorText(e);
+  const code: MessageCode = raw === "Another operation is still running." ? "busy" : "other";
+  return code === "busy" ? localizedMessage(locale, code) : `${localizedMessage(locale, code)} ${raw}`;
+}
+
+let notice: (() => string) | null = null;
+function status(makeText: () => string) {
+  notice = makeText;
+  message(makeText());
+}
+
+function clearStatus() {
+  notice = null;
+  message(null);
+}
+
+function localize() {
+  locale = resolveAppLocale(m.settings.language, navigator.language);
+  S = appStrings(locale);
+  document.documentElement.lang = locale;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-s]")) {
+    const value = (S as Record<string, unknown>)[el.dataset.s ?? ""];
+    if (typeof value === "string") el.textContent = value;
+  }
+  fillSelect($("opt-language") as HTMLSelectElement, [["system", S.languageSystem], ["en", S.languageEnglish], ["zh-CN", S.languageChinese]]);
+  fillSelect($("opt-export-language") as HTMLSelectElement, [["en", S.languageEnglish], ["zh-CN", S.languageChinese]]);
+  fillSelect($("opt-edge") as HTMLSelectElement, WEB_EDGES.map((edge) => [String(edge), S.edgeOption(edge)]));
+  fillSelect($("opt-precision") as HTMLSelectElement,
+    PRECISION.map(([d, approx]) => [d === null ? "full" : String(d), d === null ? S.precisionFull : S.precisionDecimals(d, approx)]));
+  fillSelect($("opt-basemap") as HTMLSelectElement, S.basemaps.map(([value, label]) => [value, label]));
+  fillSelect($("opt-theme") as HTMLSelectElement, S.themes.map(([value, label]) => [value, label]));
+  ($("preview") as HTMLIFrameElement).title = S.previewTitle;
+  renderAll();
+  if (m.busy) renderProgress();
+  if (($("export-dlg") as HTMLDialogElement).open) renderExportDialog();
+  if (notice) message(notice());
+  void api.setMenuLanguage(locale).catch(() => {});
+}
+
 function fillSelect(el: HTMLSelectElement, options: [string, string][]) {
   el.replaceChildren(
     ...options.map(([value, label]) => {
@@ -105,15 +152,27 @@ function joinPath(dir: string, name: string): string {
 }
 
 let saveTimer: number | undefined;
-function persist() {
+let saveQueue: Promise<void> = Promise.resolve();
+function saveNow(): Promise<void> {
+  const snapshot = { ...m.settings };
+  saveQueue = saveQueue.then(() => api.saveSettings(snapshot)).catch(() => {});
+  return saveQueue;
+}
+function persist(immediate = false) {
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => void api.saveSettings(m.settings).catch(() => {}), 300);
+  if (immediate) {
+    void saveNow();
+    return;
+  }
+  saveTimer = window.setTimeout(() => void saveNow(), 300);
 }
 
 // ---- rendering -------------------------------------------------------------------------
 
 function renderSettings() {
   const s = m.settings;
+  ($("opt-language") as HTMLSelectElement).value = s.language;
+  ($("opt-export-language") as HTMLSelectElement).value = resolveExportLocale(s.exportLanguage, locale);
   ($("opt-title") as HTMLInputElement).value = s.title;
   for (const r of document.querySelectorAll<HTMLInputElement>("input[name=full]")) r.checked = r.value === s.full;
   ($("opt-edge") as HTMLSelectElement).value = String(s.webEdge);
@@ -136,21 +195,26 @@ function renderSummary() {
   const kinds = sum.withLocation > 0 ? S.kinds(sum.photos, sum.videos, sum.live) : "";
   let dates = "";
   if (sum.firstDay && sum.lastDay) {
-    dates = sum.firstDay === sum.lastDay ? S.dateRangeSame(sum.firstDay) : S.dateRange(sum.firstDay, sum.lastDay);
+    dates = sum.firstDay === sum.lastDay ? S.dateRangeSame(formatDay(sum.firstDay, locale)) : S.dateRange(formatDay(sum.firstDay, locale), formatDay(sum.lastDay, locale));
   } else if (sum.withLocation > 0) {
     dates = S.noDates;
   }
-  $("summary-dates").textContent = [kinds, dates].filter(Boolean).join(". ");
+  $("summary-dates").textContent = [kinds, dates].filter(Boolean).join(S.summarySeparator);
 
   const skipped = sum.skipped.reduce((n, g) => n + g.count, 0);
   show($("skips"), skipped > 0);
   $("skips-summary").textContent = S.skipped(skipped);
   const body = $("skips-body");
+  const expanded = new Set([...body.querySelectorAll<HTMLDetailsElement>("details[open]")].map((el) => el.dataset.reason));
   body.replaceChildren(
     ...sum.skipped.map((g) => {
       const d = document.createElement("details");
+      d.dataset.reason = g.reason;
+      d.open = expanded.has(g.reason);
       const head = document.createElement("summary");
-      head.textContent = `${g.label} (${g.count})`;
+      const reason = g.reason as MessageCode;
+      const label = reason in { noLocation: 1, unreadable: 1, unsupported: 1, duplicate: 1 } ? localizedMessage(locale, reason) : g.label;
+      head.textContent = `${label} (${formatCount(g.count, locale)})`;
       const list = document.createElement("ul");
       for (const f of g.files) {
         const li = document.createElement("li");
@@ -159,7 +223,7 @@ function renderSummary() {
       }
       if (g.count > g.files.length) {
         const li = document.createElement("li");
-        li.textContent = `... and ${(g.count - g.files.length).toLocaleString()} more`;
+        li.textContent = S.skipMore(g.count - g.files.length);
         list.appendChild(li);
       }
       d.append(head, list);
@@ -201,16 +265,26 @@ function renderPreview() {
   }
 }
 
-function showProgress(label: string, done: number, total: number, detail = "") {
+let currentProgress: { phase: Phase | "poster"; done: number; total: number; file: string } | null = null;
+function showProgress(phase: Phase | "poster", done: number, total: number, file = "") {
+  currentProgress = { phase, done, total, file };
+  renderProgress();
+}
+
+function renderProgress() {
+  if (!currentProgress) return;
+  const { phase, done, total, file } = currentProgress;
   show($("progress"), true);
-  $("progress-label").textContent = label;
+  $("progress-label").textContent = phase === "scan" ? S.scanning : phase === "poster" ? S.capturing : phase === "process" ? S.processing : S.exporting;
   const bar = $("progress-bar") as HTMLProgressElement;
   bar.max = Math.max(total, 1);
   bar.value = done;
-  $("progress-detail").textContent = detail || (total > 0 ? `${done.toLocaleString()} / ${total.toLocaleString()}` : "");
+  const count = total > 0 ? `${formatCount(done, locale)} / ${formatCount(total, locale)}` : "";
+  $("progress-detail").textContent = [count, file].filter(Boolean).join("  ");
 }
 
 function hideProgress() {
+  currentProgress = null;
   show($("progress"), false);
 }
 
@@ -245,7 +319,7 @@ function refreshSoon() {
       loadPreview(built.version);
       renderActions();
     } catch (e) {
-      message(errorText(e));
+      status(() => operationError(e));
     }
   }, 400);
 }
@@ -254,27 +328,28 @@ function refreshSoon() {
 
 async function startScan(paths: string[], append: boolean) {
   if (m.busy || paths.length === 0) return;
-  message(null);
+  clearStatus();
   m.busy = "scan";
   m.built = null;
   m.exported = null;
   renderAll();
-  showProgress(S.scanning, 0, 0);
+  showProgress("scan", 0, 0);
   try {
     await api.scan(paths, append);
   } catch (e) {
     m.busy = null;
     hideProgress();
-    message(errorText(e));
+    status(() => operationError(e));
     renderAll();
   }
 }
 
 async function build() {
   if (m.busy || !m.summary) return;
-  message(null);
+  clearStatus();
+  pendingPlaceholders = 0;
   m.exported = null;
-  await api.saveSettings(m.settings).catch(() => {});
+  await saveNow();
   m.cancelPosters = false;
   let placeholders = 0;
   if (m.settings.includeVideo && m.summary.pendingPosters.length > 0) {
@@ -282,13 +357,13 @@ async function build() {
     renderActions();
     const run = await capturePosters(
       m.summary.pendingPosters,
-      (done, total) => showProgress(S.capturing, done, total),
+      (done, total) => showProgress("poster", done, total),
       () => m.cancelPosters,
     );
     if (run.cancelled) {
       m.busy = null;
       hideProgress();
-      message(S.cancelled);
+      status(() => S.cancelled);
       renderActions();
       return;
     }
@@ -298,32 +373,33 @@ async function build() {
   }
   m.busy = "process";
   renderActions();
-  showProgress(S.processing, 0, 0);
+  showProgress("process", 0, 0);
   try {
     await api.process(m.settings);
-    pendingNotice = placeholders > 0 ? S.placeholders(placeholders) : "";
+    pendingPlaceholders = placeholders;
   } catch (e) {
     m.busy = null;
     hideProgress();
-    message(errorText(e));
+    status(() => operationError(e));
     renderActions();
   }
 }
 
-let pendingNotice = "";
+let pendingPlaceholders = 0;
 
 function cancel() {
   m.cancelPosters = true;
   void api.cancel();
 }
 
-function onFinish(f: { phase: Phase; ok: boolean; cancelled: boolean; message?: string; data?: unknown }) {
+function onFinish(f: { phase: Phase; ok: boolean; cancelled: boolean; message?: string; code?: string; data?: unknown }) {
   m.busy = null;
   hideProgress();
   if (f.cancelled) {
-    message(S.cancelled);
+    status(() => S.cancelled);
   } else if (!f.ok) {
-    message(f.message ?? "Something went wrong.");
+    const code = f.code as MessageCode;
+    status(() => `${localizedMessage(locale, code in { busy: 1, cancelled: 1, io: 1, unimplemented: 1, unexpected: 1, other: 1 } ? code : "other")}${f.message ? ` ${f.message}` : ""}`);
   }
   if (f.phase === "scan" && f.ok) {
     m.summary = f.data as Summary;
@@ -331,17 +407,14 @@ function onFinish(f: { phase: Phase; ok: boolean; cancelled: boolean; message?: 
     const built = f.data as Built;
     m.built = built;
     m.builtKey = mediaKey(m.settings);
-    const notes = [S.built(built.items)];
-    if (built.errorCount) notes.push(S.failedItems(built.errorCount));
-    if (pendingNotice) notes.push(pendingNotice);
-    message(notes.join(" "));
+    status(() => [S.built(built.items), ...(built.errorCount ? [S.failedItems(built.errorCount)] : []), ...(pendingPlaceholders > 0 ? [S.placeholders(pendingPlaceholders)] : [])].join(" "));
     loadPreview(built.version);
   } else if (f.phase === "export" && f.ok) {
     const done = f.data as Exported;
     m.exported = { path: done.path, format: m.settings.format };
     m.serveUrl = null;
     void api.serveStop();
-    message(S.exportedTo(done.bytes));
+    status(() => S.exportedTo(done.bytes));
   }
   renderAll();
 }
@@ -370,7 +443,7 @@ async function startOver() {
   m.built = null;
   m.exported = null;
   m.serveUrl = null;
-  message(null);
+  clearStatus();
   renderAll();
 }
 
@@ -409,17 +482,17 @@ async function runExport() {
     out = typeof parent === "string" ? joinPath(parent, name) : null;
   }
   if (!out) return;
-  message(null);
+  clearStatus();
   m.busy = "export";
   renderActions();
-  showProgress(S.exporting, 0, 0);
+  showProgress("export", 0, 0);
   persist();
   try {
     await api.exportTo(format, out, m.settings);
   } catch (e) {
     m.busy = null;
     hideProgress();
-    message(errorText(e));
+    status(() => operationError(e));
     renderActions();
   }
 }
@@ -435,7 +508,7 @@ async function toggleServe() {
       await api.openInBrowser(m.serveUrl).catch(() => {});
     }
   } catch (e) {
-    message(errorText(e));
+    status(() => operationError(e));
   }
   renderActions();
 }
@@ -485,6 +558,17 @@ function bindSettings() {
     s.theme = (e.target as HTMLSelectElement).value;
     changed(true);
   });
+  $("opt-language").addEventListener("change", (e) => {
+    s.language = (e.target as HTMLSelectElement).value as Settings["language"];
+    persist(true);
+    localize();
+  });
+  $("opt-export-language").addEventListener("change", (e) => {
+    s.exportLanguage = (e.target as HTMLSelectElement).value as Locale;
+    changed(true);
+    persist(true);
+    renderExportDialog();
+  });
 }
 
 function bindExportDialog() {
@@ -505,23 +589,15 @@ function bindExportDialog() {
 }
 
 async function init() {
-  for (const el of document.querySelectorAll<HTMLElement>("[data-s]")) {
-    const v = (S as Record<string, unknown>)[el.dataset.s ?? ""];
-    if (typeof v === "string") el.textContent = v;
-  }
-  fillSelect($("opt-edge") as HTMLSelectElement, WEB_EDGES.map((e) => [String(e), S.edgeOption(e)]));
-  fillSelect(
-    $("opt-precision") as HTMLSelectElement,
-    PRECISION.map(([d, approx]) => [d === null ? "full" : String(d), d === null ? S.precisionFull : S.precisionDecimals(d, approx)]),
-  );
-  fillSelect($("opt-basemap") as HTMLSelectElement, S.basemaps.map(([v, l]) => [v, l]));
-  fillSelect($("opt-theme") as HTMLSelectElement, S.themes.map(([v, l]) => [v, l]));
-
   const [info, settings] = await Promise.all([api.info(), api.getSettings()]);
   m.settings = settings;
+  const previousExportLanguage = settings.exportLanguage;
+  m.settings.exportLanguage = resolveExportLocale(settings.exportLanguage, resolveAppLocale(settings.language, navigator.language));
+  if (previousExportLanguage !== m.settings.exportLanguage) persist(true);
   m.previewUrl = info.previewUrl;
   setProtocolBase(info.previewUrl);
   $("version").textContent = `v${info.version}`;
+  localize();
 
   bindSettings();
   bindExportDialog();
@@ -532,16 +608,15 @@ async function init() {
   $("btn-export").addEventListener("click", openExport);
   $("btn-cancel").addEventListener("click", cancel);
   $("btn-open").addEventListener("click", () => {
-    if (m.exported) void api.openInBrowser(m.exported.path).catch((e) => message(errorText(e)));
+    if (m.exported) void api.openInBrowser(m.exported.path).catch((e) => status(() => operationError(e)));
   });
   $("btn-reveal").addEventListener("click", () => {
-    if (m.exported) void api.reveal(m.exported.path).catch((e) => message(errorText(e)));
+    if (m.exported) void api.reveal(m.exported.path).catch((e) => status(() => operationError(e)));
   });
   $("btn-serve").addEventListener("click", () => void toggleServe());
 
   await onProgress((p) => {
-    const label = p.phase === "scan" ? S.scanning : p.phase === "process" ? S.processing : S.exporting;
-    showProgress(label, p.done, p.total, p.label ? `${p.done.toLocaleString()} / ${p.total.toLocaleString()}  ${p.label}` : "");
+    showProgress(p.phase, p.done, p.total, p.label);
   });
   await onFinished(onFinish);
   await onMenu((id) => {
@@ -557,4 +632,4 @@ async function init() {
   renderAll();
 }
 
-void init().catch((e) => message(errorText(e)));
+void init().catch((e) => status(() => operationError(e)));

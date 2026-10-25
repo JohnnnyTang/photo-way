@@ -5,7 +5,7 @@
 html, body { margin: 0; height: 100%; }
 
 .pw-root {
-  --pw-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --pw-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Roboto, "Helvetica Neue", Arial, sans-serif;
   --pw-radius: 14px;
   --pw-radius-sm: 9px;
   --pw-top-h: 56px;
@@ -340,6 +340,10 @@ img.pw-modal-media { flex: 0 1 auto; }
 .pw-tl-day > .pw-tl-trip { left: -1px; top: 10px; bottom: 10px; width: 4px; border-radius: 0 2px 2px 0; }
 .pw-tl-item.is-hover img { border-color: var(--pw-text); }
 .pw-pop-sub { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pw-border); }
+.pw-language { padding: 8px 12px; border-bottom: 1px solid var(--pw-border); }
+.pw-language .pw-pop-title { margin-bottom: 6px; }
+.pw-language-opt { border: 1px solid var(--pw-border); background: var(--pw-surface); color: var(--pw-text); border-radius: 7px; padding: 7px 10px; margin: 3px 5px 3px 0; cursor: pointer; font: inherit; }
+.pw-language-opt[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--pw-accent, #d9480f); }
 @media (max-width: 640px) {
   .pw-legend { left: 56px; padding: 5px 8px; gap: 6px; }
   .pw-legend-bar { width: 90px; }

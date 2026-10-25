@@ -64,6 +64,9 @@ enum Command {
         /// Default basemap (auto, offline, satellite, satellite-labels, topo, osm, terrain).
         #[arg(long, default_value = "auto")]
         basemap: String,
+        /// Default language of the exported viewer (en or zh-CN).
+        #[arg(long, value_enum, default_value_t = LangArg::En)]
+        lang: LangArg,
     },
     /// Serve an exported folder, zip, or HTML file on localhost.
     ///
@@ -95,6 +98,23 @@ enum FullArg {
     None,
     Web,
     Original,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum LangArg {
+    #[value(name = "en")]
+    En,
+    #[value(name = "zh-CN")]
+    ZhCn,
+}
+
+impl LangArg {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::En => "en",
+            Self::ZhCn => "zh-CN",
+        }
+    }
 }
 
 /// Writes throttled progress lines to stderr; stdout stays clean for results.
@@ -194,6 +214,7 @@ fn build(
     cache: Option<PathBuf>,
     theme: String,
     basemap: String,
+    lang: LangArg,
 ) -> Result<()> {
     if !THEMES.contains(&theme.as_str()) {
         bail!("unknown theme '{theme}' ({})", THEMES.join(", "));
@@ -236,6 +257,7 @@ fn build(
         options: ProjectOptions {
             theme,
             basemap,
+            lang: Some(lang.as_str().into()),
             ..ProjectOptions::default()
         },
         coord_decimals,
@@ -350,6 +372,7 @@ fn run() -> Result<()> {
             cache,
             theme,
             basemap,
+            lang,
         } => build(
             inputs,
             out,
@@ -363,6 +386,7 @@ fn run() -> Result<()> {
             cache,
             theme,
             basemap,
+            lang,
         ),
         Command::Serve { path, addr } => serve_cmd(path, addr),
         Command::Inspect { inputs, json } => inspect(inputs, json),
@@ -376,5 +400,33 @@ fn main() -> ExitCode {
             eprintln!("error: {e:#}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_language_accepts_only_supported_values() {
+        let parse =
+            |lang| Cli::try_parse_from(["photoway", "build", "trip", "-o", "trip.html", "--lang", lang]);
+        let cli = parse("zh-CN").expect("Simplified Chinese is supported");
+        assert!(matches!(
+            cli.command,
+            Command::Build {
+                lang: LangArg::ZhCn,
+                ..
+            }
+        ));
+        let cli = parse("en").expect("English is supported");
+        assert!(matches!(
+            cli.command,
+            Command::Build {
+                lang: LangArg::En,
+                ..
+            }
+        ));
+        assert!(parse("fr").is_err());
     }
 }

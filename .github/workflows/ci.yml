@@ -39,7 +39,8 @@ jobs:
       # Viewer scripts below are provided by Wave 1 · C; --if-present keeps this job green before and after.
       - run: npm run lint -w viewer --if-present
       - run: npm run typecheck -w viewer --if-present
-      - run: npm run test -w viewer --if-present -- --passWithNoTests
+      - name: Viewer tests (including locale/catalog parity)
+        run: npm run test -w viewer --if-present -- --passWithNoTests
       - run: npm run build -w viewer
       - name: Size budgets (viewer bundle, basemap)
         run: node scripts/check-size.mjs --only viewer,basemap --require
@@ -78,6 +79,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build -w viewer
+      - run: npm run typecheck -w app
       - run: npm run build -w app
 
       - uses: dtolnay/rust-toolchain@stable

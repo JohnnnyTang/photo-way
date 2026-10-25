@@ -1,4 +1,6 @@
 import { BASEMAPS, resolveBasemap, type BasemapId } from "./basemap";
+import { resolveViewerLocale, type Locale } from "../../shared/locale";
+import { viewerStrings } from "./catalog";
 import { buildRows, dayKeyOf, groupByDay, NO_DAY, sortByTime, type DayGroup } from "./days";
 import { createResolver, domPackReader, hasInlineData, type RefResolver } from "./data";
 import { h, icon, ICONS } from "./dom";
@@ -6,16 +8,16 @@ import { DEFAULT_LOOK, MapView, routeRamp, type RouteContext, type RouteLook } f
 import { Modal } from "./modal";
 import type { Item, Kind, Project, Theme } from "./model";
 import { computeSuspects, DEFAULT_OUTLIER_KMH } from "./outliers";
-import { applyEdits, collectEdits, loadEdits, loadPrefs, safeStorage, saveEdits, savePrefs, type Edits } from "./persist";
+import { applyEdits, collectEdits, loadEdits, loadLanguage, loadPrefs, safeStorage, saveEdits, saveLanguage, savePrefs, type Edits } from "./persist";
 import { Player } from "./play";
 import { buildRoute, type RouteResult } from "./route";
 import { computeTripStats, formatStat, type TripStats } from "./stats";
 import { bakeProject, buildCorrections, downloadText, renderCopyHtml, safeFilename } from "./savecopy";
-import { T } from "./strings";
+import { T, setViewerStrings } from "./strings";
 import { normalizeTheme, readMapColors, resolveTheme, THEME_IDS } from "./themes";
 import { Timeline, type DayState } from "./timeline";
 import { rampAt, timeRamp, tripOrder, tripT, type TripOrder } from "./trip";
-import { clamp, clockOf, formatCoord, parseDay } from "./util";
+import { clamp, clockOf, formatCoord, formatViewerDay, parseDay } from "./util";
 
 export interface MountOptions {
   mode?: "export" | "preview";
@@ -56,6 +58,7 @@ export class App {
   private globe = false;
   private offline = false;
   private storageOk = true;
+  private locale: Locale = "en";
 
   private resolver: RefResolver;
   private resolveOverride: ((ref: string) => string) | undefined;
@@ -97,6 +100,9 @@ export class App {
     project: Project,
     private opts: MountOptions,
   ) {
+    this.locale = this.projectLocale(project);
+    setViewerStrings(viewerStrings(this.locale));
+    document.documentElement.lang = this.locale;
     this.resolveOverride = opts.resolveRef;
     this.resolver = createResolver(domPackReader(document));
     this.root = h("div", { class: "pw-root" });
@@ -126,6 +132,8 @@ export class App {
   // ---- data --------------------------------------------------------------------------------------
 
   private loadProject(project: Project, first: boolean): void {
+    const nextLocale = this.projectLocale(project);
+    if (nextLocale !== this.locale) this.setLanguage(nextLocale, false);
     this.project = project;
     this.pristine = project.items.map((i) => ({ ...i }));
     const storage = safeStorage();
@@ -169,6 +177,58 @@ export class App {
     this.resolver = createResolver(domPackReader(document));
     this.loadProject(project, false);
     this.timeline.scrollToDay(this.groups[0]?.key ?? "", false);
+  }
+
+  private projectLocale(project: Project): Locale {
+    return resolveViewerLocale(loadLanguage(project.id), project.options?.lang, typeof navigator === "undefined" ? "en" : navigator.language);
+  }
+
+  private setLanguage(locale: Locale, persist = true): void {
+    if (locale === this.locale && persist) return;
+    this.locale = locale;
+    setViewerStrings(viewerStrings(locale));
+    document.documentElement.lang = locale;
+    if (persist) saveLanguage(this.project.id, locale);
+    if (!this.timeline) return;
+    this.closePops();
+    const labels = [T.toolbar.filters, T.toolbar.layers, T.toolbar.theme, T.toolbar.menu, T.days.list];
+    this.pops.forEach((pop, i) => {
+      pop.btn.title = labels[i]!;
+      pop.btn.setAttribute("aria-label", labels[i]!);
+    });
+    const tools = this.root.querySelectorAll<HTMLElement>(".pw-tool");
+    [T.toolbar.fit, this.globe ? T.toolbar.flat : T.toolbar.globe].forEach((label, i) => {
+      if (tools[i]) { tools[i].title = label; tools[i].setAttribute("aria-label", label); }
+    });
+    const nav = this.root.querySelectorAll<HTMLElement>(".pw-daybtn");
+    [T.days.prev, T.days.next, T.days.toggle].forEach((label, i) => {
+      if (nav[i]) { nav[i].title = label; nav[i].setAttribute("aria-label", label); }
+    });
+    this.root.querySelector<HTMLElement>(".pw-bottom")?.setAttribute("aria-label", T.timeline.label);
+    this.legendEl.setAttribute("aria-label", T.legend.label);
+    this.legendEl.title = T.legend.label;
+    const noMap = this.root.querySelector<HTMLElement>(".pw-nomap");
+    if (noMap) noMap.textContent = T.noWebgl;
+    if (this.offlineHint) this.updateHintToast();
+    const keepHidden = this.menuKeepHidden?.checked ?? false;
+    for (const key of ["filters", "layers", "theme", "menu"] as const) {
+      const previous = this.panels[key];
+      const replacement = key === "filters" ? this.buildFiltersPanel() : key === "layers" ? this.buildLayersPanel() : key === "theme" ? this.buildThemePanel() : this.buildMenuPanel();
+      previous.replaceWith(replacement);
+      this.panels[key] = replacement;
+      const pop = this.pops.find((p) => p.panel === previous);
+      if (pop) pop.panel = replacement;
+    }
+    this.menuKeepHidden.checked = keepHidden;
+    this.timeline.refreshLanguage();
+    this.modal.refreshLanguage();
+    this.refreshStats();
+    this.refreshCard();
+    this.refreshDayNav();
+    this.refreshPanels();
+    this.updateMenu();
+    this.refreshPlay();
+    this.refreshLegend();
   }
 
   private probeStorage(): boolean {
@@ -277,7 +337,7 @@ export class App {
     const oneDay = dayKeyOf(first) === dayKeyOf(last);
     const label = (it: Item) => {
       const p = parseDay(dayKeyOf(it));
-      return oneDay || !p ? clockOf(it.time) : `${p.monthName.slice(0, 3)} ${p.day}`;
+      return oneDay || !p ? clockOf(it.time) : formatViewerDay(dayKeyOf(it), this.locale, "short");
     };
     const ticks: HTMLElement[] = [];
     let prev = "";
@@ -358,7 +418,7 @@ export class App {
     const parts = [shown === total ? T.stats.items(total) : T.stats.shown(shown, total)];
     if (dayCount) parts.push(T.stats.days(dayCount));
     // The chosen day's numbers, or the whole trip's.
-    const numbers = formatStat(this.dayKey ? this.tripStats.days.get(this.dayKey) : this.tripStats.total);
+    const numbers = formatStat(this.dayKey ? this.tripStats.days.get(this.dayKey) : this.tripStats.total, true, this.locale);
     if (numbers) parts.push(numbers);
     if (this.suspects.size) parts.push(T.stats.outliers(this.suspects.size));
     this.statsEl.textContent = parts.join(" · ");
@@ -367,7 +427,7 @@ export class App {
   private refreshDayNav(): void {
     const g = this.dayKey ? this.groups.find((x) => x.key === this.dayKey) : null;
     const p = g ? parseDay(g.key) : null;
-    this.dayBtnLabel.textContent = g ? (p ? `${p.weekday}, ${p.monthName} ${p.day}` : T.days.none) : T.days.all;
+    this.dayBtnLabel.textContent = g ? (p ? formatViewerDay(g!.key, this.locale, "short") : T.days.none) : T.days.all;
     this.dayCountEl.textContent = g ? T.days.count(this.groupIds(g.key).length) : T.stats.items(this.items.filter(this.typeOk).length);
     const state = g ? this.dayState(g.key) : null;
     this.dayEye.disabled = !g;
@@ -755,7 +815,7 @@ export class App {
         "button",
         { type: "button", role: "radio", class: "pw-mapopt", "data-id": b.id },
         h("span", { class: "pw-mapswatch", style: `background:${b.swatch}` }),
-        h("span", { class: "pw-maptext" }, h("span", { class: "pw-switchlabel" }, b.label), h("span", { class: "pw-hint" }, b.online ? T.map.onlineNote : T.map.offlineNote)),
+        h("span", { class: "pw-maptext" }, h("span", { class: "pw-switchlabel" }, b.id === "satellite-labels" ? T.map.satelliteLabels : T.map[b.id]), h("span", { class: "pw-hint" }, b.online ? T.map.onlineNote : T.map.offlineNote)),
       );
       btn.addEventListener("click", () => this.setBasemap(b.id, true));
       list.append(btn);
@@ -814,10 +874,18 @@ export class App {
       this.select(this.selectedId);
     });
     reset.classList.add("pw-resetitem");
+    const languages = h("div", { class: "pw-language", role: "radiogroup", "aria-label": T.menu.language },
+      h("div", { class: "pw-pop-title" }, T.menu.language));
+    for (const [locale, label] of [["en", "English"], ["zh-CN", "简体中文"]] as const) {
+      const button = h("button", { type: "button", role: "radio", class: "pw-language-opt", "aria-checked": String(this.locale === locale), lang: locale }, label);
+      button.addEventListener("click", () => this.setLanguage(locale));
+      languages.append(button);
+    }
     const panel = h(
       "div",
       { class: "pw-pop pw-pop-right pw-menu", hidden: true, role: "menu", "aria-label": T.toolbar.menu },
       this.menuInfo,
+      languages,
       exportBtn,
       this.opts.mode === "preview" ? null : copyItem,
       this.opts.mode === "preview" ? null : this.menuCopy,
@@ -851,6 +919,7 @@ export class App {
 
   private saveCopy(): void {
     const baked = bakeProject(this.project, this.currentEdits(), { keepHidden: this.menuKeepHidden.checked });
+    baked.options = { ...baked.options, lang: this.locale };
     const html = renderCopyHtml(document, baked);
     if (html == null) return;
     downloadText(safeFilename(baked.title, "html"), html, "text/html");
@@ -894,7 +963,7 @@ export class App {
     rows.push(all);
     for (const g of this.visibleDays()) {
       const p = parseDay(g.key);
-      const label = p ? `${p.weekday}, ${p.monthName} ${p.day}, ${p.year}` : T.days.none;
+      const label = p ? formatViewerDay(g.key, this.locale) : T.days.none;
       const eye = h("span", { class: "pw-dayeye", role: "button", tabindex: "0", title: T.days.toggle, "aria-label": T.days.toggle });
       eye.append(icon(this.dayState(g.key) === "none" ? ICONS.eyeOff : ICONS.eye, 16));
       eye.addEventListener("click", (e) => {
@@ -905,7 +974,7 @@ export class App {
         "button",
         { type: "button", class: `pw-dayrow${g.key === this.dayKey ? " is-current" : ""}`, role: "menuitem" },
         h("span", { class: "pw-daydot", "data-state": this.dayState(g.key) }),
-        h("span", { class: "pw-daytext" }, label, h("span", { class: "pw-hint" }, T.days.count(this.groupIds(g.key).length)), h("span", { class: "pw-hint pw-daystat" }, formatStat(this.tripStats.days.get(g.key)))),
+        h("span", { class: "pw-daytext" }, label, h("span", { class: "pw-hint" }, T.days.count(this.groupIds(g.key).length)), h("span", { class: "pw-hint pw-daystat" }, formatStat(this.tripStats.days.get(g.key), true, this.locale))),
         eye,
       );
       row.addEventListener("click", () => {
@@ -935,7 +1004,7 @@ export class App {
     if (this.suspects.has(it.id)) tags.push(h("span", { class: "pw-tag pw-tag-suspect" }, T.card.suspect));
     if (this.hidden.has(it.id)) tags.push(h("span", { class: "pw-tag" }, T.card.hiddenTag));
     const p = parseDay(it.day ?? (it.time ? it.time.slice(0, 10) : null));
-    const when = p ? `${p.monthName} ${p.day} · ${clockOf(it.time)}` : T.card.noTime;
+    const when = p ? `${formatViewerDay(dayKeyOf(it), this.locale, "short")} · ${clockOf(it.time)}` : T.card.noTime;
     const btn = (label: string, path: string, fn: () => void, cls = "") => {
       const b = h("button", { type: "button", class: `pw-cardbtn ${cls}` }, icon(path, 15), label);
       b.addEventListener("click", fn);

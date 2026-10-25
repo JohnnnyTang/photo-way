@@ -1,13 +1,13 @@
 # Photo Way — Development Plan
 
-> Status: **approved** 2026-10-24 — decisions in §6 confirmed. Waves 0–2 merged; v0.1.0 released. Wave 3 (H docs, I release smoke, J per-day stats only) merged for v0.1.1; the other J extras stay in the backlog. Gates: `docs/WAVE1_GATE.md`, `docs/WAVE2_GATE.md`, `docs/WAVE3_GATE.md`.
+> Status: **v0.2.0 in release** (bilingual English + Simplified Chinese). Waves 0–4 are merged; the other Wave 3 extras remain in the backlog. See [the Wave 4 plan](WAVE4_PLAN.md) and gates in `docs/WAVE1_GATE.md`, `docs/WAVE2_GATE.md`, `docs/WAVE3_GATE.md`, and `docs/WAVE4_GATE.md`.
 > Goal: a tiny, elegant desktop app (Windows + macOS) that turns a pile of geotagged
 > phone photos/videos into a **portable, self-contained, shareable** route map —
 > a single `.html` file or a small zip bundle — that works from `file://` and over HTTP.
 
 ---
 
-## 0. Where the project is today
+## 0. Starting point before v0.1.0 (historical)
 
 | Piece | What it does | Problems for the new goal |
 |---|---|---|
@@ -39,7 +39,7 @@ Also shipped: a `photoway` CLI (same core) — `build`, `serve`, `inspect`. It i
 - Feature parity with the current template: route with direction arrows, start/end, timeline with day separators, day navigation, outlier filter, type filter, drag-to-correct, full-size modal (photo + video), fit-all, 2D / globe.
 - **3D terrain basemap option** (online): MapLibre `raster-dem` terrain + hillshade from the keyless open AWS Terrain Tiles (Terrarium encoding), exaggeration slider, pitch/rotate; route and markers drape on terrain. Hidden/disabled when offline.
 - **Theme selector** in the HTML: Auto (follows OS) / Light / Dark / plus a few curated palettes (e.g. "Dusk", "Paper", "Forest"). Implemented as CSS custom-property sets; persisted per viewer in localStorage; the exporter picks the default theme. Map basemap style and route/marker colours follow the theme.
-- UI language: **English only**; all strings live in one module so localisation stays possible later.
+- UI language: **English in v0.1.0**. Wave 4 adds **English and Simplified Chinese** to the desktop app and exported viewer, with both languages bundled in every release; see [WAVE4_PLAN.md](WAVE4_PLAN.md).
 
 ### 1.3 Non-goals (v1)
 Phone apps; cloud upload/hosting; editing photos; reading the Photos.app/Google Photos libraries directly (the legacy mac export script stays as an optional helper).
@@ -115,6 +115,7 @@ Wave 0  Foundations + spikes ───────────────► co
 Wave 1  A Metadata   B Media   C Viewer   D CI/Release      (4 parallel)
 Wave 2  E Bundle+CLI+Serve   F Desktop app   G E2E/perf      (3 parallel)
 Wave 3  H Docs   I Release hardening → v0.1.0   J Extras     (2–3 parallel)
+Wave 4  K Locale contracts → L App / M Viewer → N Docs, QA & release → v0.2.0
 ```
 
 ### Wave 0 — Foundations & risk spikes (lead + 2 spike agents)
@@ -152,6 +153,21 @@ Spike agents (parallel, throwaway branches):
 
 ---
 
+### Wave 4 — Bilingual release (next, target v0.2.0)
+
+Ship English (`en`) and Simplified Chinese (`zh-CN`) together in the desktop app and every new exported map. Keep one product, one version, and one release tag. The [detailed Wave 4 plan](WAVE4_PLAN.md) defines language selection, compatibility, ownership, tests, and the recurring bilingual release checklist.
+
+- **K · Locale contracts (first)** — audit visible text; define typed translation catalogs, locale resolution, app settings, export language, and backward-compatible data contracts.
+- **L · Desktop app** — translate the shell, native menus, app-owned dialogs, progress and errors; add remembered language selection and an independent export-language option.
+- **M · Viewer and exports** — bundle both languages offline; translate all viewer states and formatting; preserve edits and trip state when switching; carry the chosen language through export and Save a copy.
+- **N · Documentation, QA and release** — English/Chinese documentation and release notes, bilingual installers, translation checks in CI, upgrade and export smoke tests, then the v0.2.0 release gate.
+
+K lands before L and M; N can prepare documentation and packaging alongside them, but final validation follows integration. Workstream labels describe implementation ownership, not work started by this planning update. Wave 3 extras remain deferred.
+
+**Exit:** both languages pass the same desktop and exported-map flows, v0.1.0 compatibility is verified, packaged installers pass language and upgrade checks, bilingual docs/notes are ready, and the release checklist has recorded evidence. No release date is committed.
+
+---
+
 ## 5. Risks & mitigations
 | Risk | Mitigation |
 |---|---|
@@ -167,5 +183,5 @@ Spike agents (parallel, throwaway branches):
 1. Public repo `photo-way` under the logged-in GitHub account; licence **MIT** (owner said "ok" without picking, so MIT was chosen; can switch to Apache-2.0 on request).
 2. D1 Tauri ✔, D2 MapLibre ✔ (Cesium dropped) **plus a 3D terrain basemap option**, D4 bundled libheif (LGPL) ✔.
 3. Full-size media in exports is a **per-export option**: none / web-sized / originals (UI pre-selects web-sized 2048 px).
-4. UI language: **English only**.
+4. UI language: **English only for v0.1.0**; superseded for the next release by Wave 4: **English + Simplified Chinese**, bundled together with a language selector.
 5. New requirement: the exported HTML has a **theme selector**.

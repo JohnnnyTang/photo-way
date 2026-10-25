@@ -14,6 +14,9 @@
       <h1>Photo Way</h1>
       <span id="version" class="muted"></span>
     </header>
+    <label class="field language-field"><span data-s="language"></span>
+      <select id="opt-language"><option value="system"></option><option value="en"></option><option value="zh-CN"></option></select>
+    </label>
 
     <section class="card drop" id="add">
       <p data-s="dropHint"></p>
@@ -63,7 +66,7 @@
       </label>
     </section>
 
-    <section class="card" id="progress" hidden>
+    <section class="card" id="progress" role="status" aria-live="polite" hidden>
       <p id="progress-label"></p>
       <progress id="progress-bar" max="100" value="0"></progress>
       <div class="row between">
@@ -89,7 +92,7 @@
       <p id="serve-info" class="muted" hidden></p>
     </section>
 
-    <p id="message" class="message" hidden></p>
+    <p id="message" class="message" role="status" aria-live="polite" hidden></p>
   </aside>
 
   <main class="stage">
@@ -97,7 +100,7 @@
       <h2 data-s="emptyTitle"></h2>
       <p class="muted" data-s="emptyBody"></p>
     </div>
-    <iframe id="preview" title="Preview" hidden></iframe>
+    <iframe id="preview" hidden></iframe>
   </main>
 </div>
 
@@ -106,6 +109,10 @@
 <dialog id="export-dlg">
   <form method="dialog" id="export-form">
     <h2 data-s="exportTitle"></h2>
+    <label class="field"><span data-s="exportLanguage"></span>
+      <select id="opt-export-language"><option value="en"></option><option value="zh-CN"></option></select>
+    </label>
+    <p class="note" data-s="privacyWarning"></p>
     <label class="choice"><input type="radio" name="format" value="html">
       <span><strong data-s="fmtHtml"></strong><small data-s="fmtHtmlHint"></small></span><em id="est-html"></em></label>
     <label class="choice"><input type="radio" name="format" value="dir">

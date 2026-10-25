@@ -33,7 +33,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
 }
 
 [hidden] { display: none !important; }
@@ -50,6 +50,7 @@ html, body {
 }
 
 .brand { display: flex; align-items: baseline; gap: 8px; }
+.language-field { margin-bottom: 0; }
 h1 { font-size: 18px; margin: 0; letter-spacing: 0.2px; }
 h2 { font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
 p { margin: 0 0 6px; }
@@ -67,6 +68,7 @@ p { margin: 0 0 6px; }
 .drop p { color: var(--muted); }
 
 .row { display: flex; gap: 8px; }
+.row > * { min-width: 0; }
 .row.wrap { flex-wrap: wrap; }
 .row.between { justify-content: space-between; align-items: center; }
 .row.end { justify-content: flex-end; margin-top: 16px; }
@@ -80,6 +82,8 @@ button {
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 button:hover:not(:disabled) { border-color: var(--muted); }
 button:disabled { opacity: 0.45; cursor: default; }
@@ -102,6 +106,7 @@ input[type="text"], select {
   width: 100%;
 }
 .radio, .check { display: flex; gap: 6px; align-items: center; margin: 2px 0; }
+.radio span, .check span, .choice span { min-width: 0; overflow-wrap: anywhere; }
 
 progress { width: 100%; height: 6px; accent-color: var(--accent); }
 

@@ -1,7 +1,8 @@
 # Photo Way — Data & Embed Contract (v1)
 
-This document is **frozen for Wave 1/2**. Changes need a version bump or an explicit
-note in the PR, because core (Rust), viewer (TS) and the app all depend on it.
+This document was **frozen for Wave 1/2**. Wave 4 adds optional `options.lang` while
+retaining version 1: older documents still deserialize, and older viewers ignore
+the new option. Core (Rust), viewer (TS), and schema change together.
 Machine-readable form: [`schema/photoway.v1.schema.json`](../schema/photoway.v1.schema.json).
 Rust mirror: `crates/core/src/model.rs`. TS mirror: `viewer/src/model.ts`.
 
@@ -20,11 +21,20 @@ Rust mirror: `crates/core/src/model.rs`. TS mirror: `viewer/src/model.ts`.
   "options": {
     "theme": "auto",              // default theme id (see §5); viewer may override per user
     "basemap": "auto",            // auto | offline | satellite | satellite-labels | topo | osm | terrain
-    "outlierSpeedKmh": 300        // threshold for computeSuspects()
+    "outlierSpeedKmh": 300,       // threshold for computeSuspects()
+    "lang": "zh-CN"              // optional; en | zh-CN; absent in older exports
   },
   "items": [ /* Item, sorted by ts ascending, nulls last */ ]
 }
 ```
+
+`options.lang` is the export's default UI language, independent of the app's own
+language. New bilingual exports write `en` or `zh-CN`. Older exports omit it.
+The viewer resolves a project-scoped saved language first, then this field, then
+the browser language only when the field is absent, then English. An explicit
+unsupported field value falls back to English. Language changes affect labels
+and formatting only; `time`, `ts`, `day`, coordinates, ordering, and user-entered
+content remain unchanged.
 
 ### 1.1 Item
 
@@ -139,6 +149,7 @@ Auto-mount: on `DOMContentLoaded`, if `#photoway` exists and data is found in `#
 |---|---|
 | `photoway:<project.id>:edits` | `{ fixes: { [itemId]: {lat, lon} }, hidden: number[] }` |
 | `photoway:prefs` | `{ theme?: string, basemap?: string, terrainExaggeration?: number }` |
+| `photoway:<project.id>:language` | `en` or `zh-CN`; added in Wave 4, independent per trip. |
 
 All storage access is wrapped in try/catch; the viewer must work when storage is unavailable.
 
