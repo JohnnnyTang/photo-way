@@ -2,6 +2,7 @@
 
 mod commands;
 mod menu;
+mod photos_import;
 mod protocol;
 mod settings;
 mod summary;
@@ -70,6 +71,8 @@ pub fn run() {
             commands::cancel,
             commands::reset,
             commands::scan,
+            commands::import_photos,
+            commands::open_photos,
             commands::set_poster,
             commands::process,
             commands::refresh_project,

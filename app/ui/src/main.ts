@@ -11,6 +11,8 @@ import {
   type Exported,
   type FormatId,
   type Phase,
+  type PhotosImportRequest,
+  type PhotosImportResult,
   type Settings,
   type Summary,
 } from "./api";
@@ -238,7 +240,7 @@ function renderActions() {
   build.textContent = m.built ? S.rebuild : S.build;
   build.disabled = !idle;
   ($("btn-export") as HTMLButtonElement).disabled = !idle || !m.built;
-  for (const id of ["btn-files", "btn-folder"]) ($(id) as HTMLButtonElement).disabled = !idle;
+  for (const id of ["btn-files", "btn-folder", "btn-photos-library"]) ($(id) as HTMLButtonElement).disabled = !idle;
   const stale = !!m.built && mediaKey(m.settings) !== m.builtKey;
   const staleEl = $("stale");
   staleEl.textContent = S.stale;
@@ -275,7 +277,7 @@ function renderProgress() {
   if (!currentProgress) return;
   const { phase, done, total, file } = currentProgress;
   show($("progress"), true);
-  $("progress-label").textContent = phase === "scan" ? S.scanning : phase === "poster" ? S.capturing : phase === "process" ? S.processing : S.exporting;
+  $("progress-label").textContent = phase === "import" ? S.photosImporting : phase === "scan" ? S.scanning : phase === "poster" ? S.capturing : phase === "process" ? S.processing : S.exporting;
   const bar = $("progress-bar") as HTMLProgressElement;
   bar.max = Math.max(total, 1);
   bar.value = done;
@@ -401,7 +403,11 @@ function onFinish(f: { phase: Phase; ok: boolean; cancelled: boolean; message?: 
     const code = f.code as MessageCode;
     status(() => `${localizedMessage(locale, code in { busy: 1, cancelled: 1, io: 1, unimplemented: 1, unexpected: 1, other: 1 } ? code : "other")}${f.message ? ` ${f.message}` : ""}`);
   }
-  if (f.phase === "scan" && f.ok) {
+  if (f.phase === "import" && f.ok) {
+    const imported = f.data as PhotosImportResult;
+    if (imported.path && imported.count > 0) void startScan([imported.path], !!m.summary);
+    else status(() => S.photosNone);
+  } else if (f.phase === "scan" && f.ok) {
     m.summary = f.data as Summary;
   } else if (f.phase === "process" && f.ok) {
     const built = f.data as Built;
@@ -433,6 +439,48 @@ async function addFiles() {
 async function addFolder() {
   const picked = await open({ directory: true, multiple: true, title: S.pickerTitleFolder });
   if (picked) await startScan(Array.isArray(picked) ? picked : [picked], !!m.summary);
+}
+
+function openPhotosDialog() {
+  if (m.busy) return;
+  ($("photos-dlg") as HTMLDialogElement).showModal();
+}
+
+function bindPhotosDialog() {
+  const dlg = $("photos-dlg") as HTMLDialogElement;
+  const source = () => document.querySelector<HTMLInputElement>('input[name="photos-source"]:checked')!.value as PhotosImportRequest["source"];
+  const update = () => show($("photos-dates"), source() === "range");
+  for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="photos-source"]')) radio.addEventListener("change", update);
+  $("photos-open").addEventListener("click", () => void api.openPhotos().catch((e) => status(() => operationError(e))));
+  $("photos-cancel").addEventListener("click", () => dlg.close());
+  $("photos-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const mode = source();
+    const startDay = ($("photos-start") as HTMLInputElement).value;
+    const endDay = ($("photos-end") as HTMLInputElement).value;
+    if (mode === "range" && (!startDay || !endDay || startDay > endDay)) {
+      status(() => S.photosDatesRequired);
+      return;
+    }
+    const request: PhotosImportRequest = {
+      source: mode,
+      startDay: mode === "range" ? startDay : null,
+      endDay: mode === "range" ? endDay : null,
+      favoritesOnly: ($("photos-favorites") as HTMLInputElement).checked,
+      locationOnly: ($("photos-location") as HTMLInputElement).checked,
+    };
+    dlg.close();
+    clearStatus();
+    m.busy = "import";
+    renderActions();
+    showProgress("import", 0, 0);
+    void api.importPhotos(request).catch((err) => {
+      m.busy = null;
+      hideProgress();
+      status(() => operationError(err));
+      renderActions();
+    });
+  });
 }
 
 async function startOver() {
@@ -597,12 +645,15 @@ async function init() {
   m.previewUrl = info.previewUrl;
   setProtocolBase(info.previewUrl);
   $("version").textContent = `v${info.version}`;
+  show($("btn-photos-library"), info.macos);
   localize();
 
   bindSettings();
   bindExportDialog();
+  bindPhotosDialog();
   $("btn-files").addEventListener("click", () => void addFiles());
   $("btn-folder").addEventListener("click", () => void addFolder());
+  $("btn-photos-library").addEventListener("click", openPhotosDialog);
   $("btn-reset").addEventListener("click", () => void startOver());
   $("btn-build").addEventListener("click", () => void build());
   $("btn-export").addEventListener("click", openExport);
@@ -622,6 +673,7 @@ async function init() {
   await onMenu((id) => {
     if (id === "add-files") void addFiles();
     else if (id === "add-folder") void addFolder();
+    else if (id === "import-photos") openPhotosDialog();
     else if (id === "export") openExport();
   });
   await getCurrentWebview().onDragDropEvent((e) => {

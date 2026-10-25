@@ -79,8 +79,16 @@ location and lists the skipped files by reason.
 ## Using the app
 
 1. **Add files.** Drop photos, videos or folders onto the window, or use **Add photos...** and **Add folder...**.
+   **Add photos...** accepts multiple files in one picker (Shift or Command on macOS).
    You can add more at any time. **Start over** clears everything. Supported: JPEG, HEIC/HEIF, PNG, TIFF, DNG,
    and MOV, MP4 videos.
+   On macOS, **Import from Photos...** also imports the current selection in Photos.app or every item
+   in an inclusive capture date range. You can narrow either source to Favorites and/or items with
+   a location. For a selection, click **Open Photos**, select multiple items there, then return to
+   Photo Way and click **Import originals**. macOS asks for Automation access the first time.
+   The originals are copied to temporary local storage for the current session and removed when you
+   choose **Start over** or quit. iCloud-only originals may need time to download. Changes made only
+   in Photos.app, such as edited locations, may not be present in the unmodified original files.
 2. **Read the summary.** Under **Found** you see how many items have a location out of how many files,
    the number of photos, videos and Live Photos, and the date range. If files were skipped, the
    "files skipped" line expands to list them by reason: no location, unreadable, unsupported, or duplicate.
