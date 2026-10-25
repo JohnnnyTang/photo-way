@@ -1,11 +1,13 @@
 # Photo Way
 
+[简体中文](README.zh-CN.md) · [English user guide](docs/USER_GUIDE.md) · [中文使用指南](docs/USER_GUIDE.zh-CN.md)
+
 Turn a pile of geotagged phone photos into a **portable route map** — one `.html` file
 (or a small zip) that opens by double-click, works offline, and can be shared without the app.
 
-> **Status: early development.** Nothing is released yet. See [docs/PLAN.md](docs/PLAN.md).
+> **v0.1.0 is released.** English + Simplified Chinese support is being developed for **v0.2.0**. See the [Wave 4 plan](docs/WAVE4_PLAN.md) and [development roadmap](docs/PLAN.md).
 
-## What it will do
+## What it does
 
 - Drop photos/videos from your iPhone or Android phone (HEIC, JPEG, MOV, MP4…).
 - See your trip as a route on a map: timeline, days, Live Photos, GPS-glitch filtering.
@@ -27,7 +29,7 @@ Turn a pile of geotagged phone photos into a **portable route map** — one `.ht
 
 ## Development
 
-Requirements: Rust (stable), Node.js 22+. On Windows, the Visual Studio C++ build tools.
+Requirements: Rust (stable), Node.js 24+. On Windows, the Visual Studio C++ build tools.
 
 ```sh
 npm ci

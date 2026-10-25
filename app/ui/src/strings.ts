@@ -19,6 +19,13 @@ export const S = {
   optPrecision: "Coordinate precision",
   optBasemap: "Default basemap",
   optTheme: "Default theme",
+  language: "Language / 语言",
+  languageSystem: "System",
+  languageEnglish: "English",
+  languageChinese: "简体中文",
+  exportLanguage: "Export language",
+  previewTitle: "Preview",
+  skipMore: (n: number) => `... and ${n.toLocaleString("en")} more`,
   cancel: "Cancel",
   exportButton: "Export...",
   resultTitle: "Exported",
@@ -36,6 +43,7 @@ export const S = {
   fmtZip: "Zip",
   fmtZipHint: "The folder, zipped for sending.",
   exportGo: "Export",
+  privacyWarning: "Exports contain locations and may include original media. Review before sharing.",
 
   build: "Build preview",
   rebuild: "Rebuild preview",
@@ -47,6 +55,7 @@ export const S = {
   dateRangeSame: (d: string) => `Taken on ${d}`,
   dateRange: (a: string, b: string) => `Taken ${a} to ${b}`,
   noDates: "No capture dates found",
+  summarySeparator: ". ",
   foundMain: (withLoc: number, found: number) =>
     `${plural(withLoc, "item")} with a location, out of ${plural(found, "file")}`,
   kinds: (photos: number, videos: number, live: number) => {
@@ -77,7 +86,7 @@ export const S = {
     ["topo", "Topographic"],
     ["osm", "OpenStreetMap"],
     ["terrain", "Terrain"],
-  ] as const,
+  ] as [string, string][],
   themes: [
     ["auto", "Automatic"],
     ["light", "Light"],
@@ -85,7 +94,7 @@ export const S = {
     ["dusk", "Dusk"],
     ["paper", "Paper"],
     ["forest", "Forest"],
-  ] as const,
+  ] as [string, string][],
   pickerPhotos: "Photos and videos",
   pickerTitleFiles: "Add photos or videos",
   pickerTitleFolder: "Add a folder",
@@ -94,8 +103,10 @@ export const S = {
   saveDir: "Choose where to create the folder",
 };
 
+export type AppStrings = typeof S;
+
 export function plural(n: number, word: string): string {
-  return `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+  return `${n.toLocaleString("en")} ${word}${n === 1 ? "" : "s"}`;
 }
 
 export function formatBytes(n: number): string {

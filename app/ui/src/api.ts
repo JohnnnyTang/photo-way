@@ -1,6 +1,7 @@
 // Typed wrappers over the Tauri commands and events (see app/src-tauri/src/commands.rs).
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { AppLanguage, Locale } from "../../../shared/locale";
 
 export type Phase = "scan" | "process" | "export";
 export type FullSize = "none" | "web" | "original";
@@ -16,6 +17,9 @@ export interface Settings {
   basemap: string;
   theme: string;
   format: FormatId;
+  language: AppLanguage;
+  /** Null in settings saved before Wave 4; resolved from app language on first use. */
+  exportLanguage: Locale | null;
 }
 
 export interface SkipGroup {
@@ -68,6 +72,8 @@ export interface Finished {
   ok: boolean;
   cancelled: boolean;
   message?: string;
+  code?: string;
+  params?: Record<string, string | number>;
   data?: unknown;
 }
 
@@ -75,6 +81,7 @@ export const api = {
   info: () => invoke<{ version: string; previewUrl: string }>("app_info"),
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
+  setMenuLanguage: (language: Locale) => invoke<void>("set_menu_language", { language }),
   cancel: () => invoke<void>("cancel"),
   reset: () => invoke<void>("reset"),
   scan: (paths: string[], append: boolean) => invoke<void>("scan", { paths, append }),

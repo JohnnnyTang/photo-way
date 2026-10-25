@@ -159,6 +159,6 @@ export const T = {
   cluster: { zoom: "Zoom in" },
   start: "Start",
   end: "End",
-} as const;
+};
 
 export type Strings = typeof T;

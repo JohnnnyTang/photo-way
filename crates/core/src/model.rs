@@ -30,6 +30,9 @@ pub struct ProjectOptions {
     pub theme: String,
     pub basemap: Basemap,
     pub outlier_speed_kmh: f64,
+    /// Exported UI language. Missing in v0.1.0 projects; the viewer uses browser language.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 impl Default for ProjectOptions {
@@ -38,6 +41,7 @@ impl Default for ProjectOptions {
             theme: "auto".into(),
             basemap: Basemap::Auto,
             outlier_speed_kmh: 300.0,
+            lang: None,
         }
     }
 }
@@ -138,5 +142,36 @@ mod tests {
             serde_json::to_string(&Basemap::SatelliteLabels).unwrap(),
             "\"satellite-labels\""
         );
+    }
+
+    #[test]
+    fn project_options_read_old_json_and_round_trip_language() {
+        let old: ProjectOptions =
+            serde_json::from_str(r#"{"theme":"auto","basemap":"offline","outlierSpeedKmh":300}"#).unwrap();
+        assert_eq!(old.lang, None);
+        assert!(serde_json::to_value(&old).unwrap().get("lang").is_none());
+        let bilingual = ProjectOptions {
+            lang: Some("zh-CN".into()),
+            ..old
+        };
+        let json = serde_json::to_string(&bilingual).unwrap();
+        assert_eq!(serde_json::from_str::<ProjectOptions>(&json).unwrap(), bilingual);
+    }
+
+    #[test]
+    fn old_project_document_keeps_items_when_language_is_added() {
+        let old = r#"{"format":"photoway","version":1,"id":"trip-1","title":"旧旅程",
+            "generator":"photoway 0.1.0","createdAt":"2026-10-24T10:00:00Z",
+            "options":{"theme":"auto","basemap":"auto","outlierSpeedKmh":300},
+            "items":[{"id":0,"kind":"photo","name":"照片.jpg","time":null,"ts":null,
+                "tsSource":null,"day":null,"lat":31.2,"lon":121.5,"w":100,"h":100,
+                "thumb":"thumbs/00000.jpg"}]}"#;
+        let mut project: Project = serde_json::from_str(old).unwrap();
+        assert_eq!(project.options.lang, None);
+        assert_eq!(project.items[0].name, "照片.jpg");
+        project.options.lang = Some("zh-CN".into());
+        let again: Project = serde_json::from_str(&serde_json::to_string(&project).unwrap()).unwrap();
+        assert_eq!(again.items, project.items);
+        assert_eq!(again.options.lang.as_deref(), Some("zh-CN"));
     }
 }

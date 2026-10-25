@@ -206,6 +206,7 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then
             cp target/release/photoway.exe stage/
             cp target/release/bundle/nsis/*.exe target/release/bundle/msi/*.msi "$out/"
+            node scripts/check-windows-installers.mjs "$out"
           else
             cp target/universal-apple-darwin/release/photoway stage/
             cp target/universal-apple-darwin/release/bundle/dmg/*.dmg "$out/"

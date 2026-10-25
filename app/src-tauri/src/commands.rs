@@ -2,7 +2,7 @@
 //!
 //! Long work runs on a background thread. Progress and results travel as events:
 //! `pw-progress` `{phase, done, total, label}` and `pw-finished`
-//! `{phase, ok, cancelled, message, data}` where `phase` is `scan`, `process` or `export`.
+//! `{phase, ok, cancelled, code?, params?, message?, data?}` where `phase` is `scan`, `process` or `export`.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -84,6 +84,15 @@ pub fn describe(e: &Error) -> String {
     }
 }
 
+fn error_code(e: &Error) -> &'static str {
+    match e {
+        Error::Cancelled => "cancelled",
+        Error::Unimplemented(_) => "unimplemented",
+        Error::Io(_) => "io",
+        Error::Other(_) => "other",
+    }
+}
+
 fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
     payload
         .downcast_ref::<&str>()
@@ -143,10 +152,20 @@ where
         app.state::<AppState>().busy.store(false, Ordering::Release);
         let payload = match result {
             Ok(Ok(data)) => json!({ "phase": phase, "ok": true, "cancelled": false, "data": data }),
-            Ok(Err(Error::Cancelled)) => json!({ "phase": phase, "ok": false, "cancelled": true }),
-            Ok(Err(e)) => json!({ "phase": phase, "ok": false, "cancelled": false, "message": describe(&e) }),
+            Ok(Err(Error::Cancelled)) => {
+                json!({ "phase": phase, "ok": false, "cancelled": true, "code": "cancelled" })
+            }
+            Ok(Err(e)) => {
+                let params = match &e {
+                    Error::Unimplemented(feature) => json!({ "feature": feature }),
+                    _ => json!({}),
+                };
+                json!({ "phase": phase, "ok": false, "cancelled": false,
+                    "code": error_code(&e), "params": params, "message": describe(&e) })
+            }
             Err(p) => json!({
                 "phase": phase, "ok": false, "cancelled": false,
+                "code": "unexpected", "params": {},
                 "message": format!("Unexpected error: {}", panic_text(p.as_ref())),
             }),
         };
@@ -227,6 +246,14 @@ pub fn get_settings(app: AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&config_dir(&app)?, &settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_menu_language(app: AppHandle, language: String) -> Result<(), String> {
+    let locale = if language == "zh-CN" { "zh-CN" } else { "en" };
+    let menu = crate::menu::build(&app, locale).map_err(|e| e.to_string())?;
+    app.set_menu(menu).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]

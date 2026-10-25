@@ -16,7 +16,8 @@
       "properties": {
         "theme": { "type": "string" },
         "basemap": { "enum": ["auto", "offline", "satellite", "satellite-labels", "topo", "osm", "terrain"] },
-        "outlierSpeedKmh": { "type": "number", "exclusiveMinimum": 0 }
+        "outlierSpeedKmh": { "type": "number", "exclusiveMinimum": 0 },
+        "lang": { "enum": ["en", "zh-CN"] }
       }
     },
     "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
