@@ -106,11 +106,11 @@ pub fn run(
         }
         if let Ok(contents) = std::fs::read_to_string(&progress_file) {
             let mut parts = contents.split_whitespace().filter_map(|s| s.parse::<u64>().ok());
-            if let (Some(done), Some(total)) = (parts.next(), parts.next()) {
-                if reported != Some((done, total)) {
-                    on_progress(done, total);
-                    reported = Some((done, total));
-                }
+            if let (Some(done), Some(total)) = (parts.next(), parts.next())
+                && reported != Some((done, total))
+            {
+                on_progress(done, total);
+                reported = Some((done, total));
             }
         }
         match child.try_wait() {
