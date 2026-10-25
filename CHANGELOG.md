@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### English
+
+- Prepare bilingual documentation and Windows installer language options for the next release.
+
+### 简体中文
+
+- 为下一版本准备中英文文档及 Windows 安装程序的语言选项。
+
 ## [0.1.1] - 2026-10-24
 
 ### Added

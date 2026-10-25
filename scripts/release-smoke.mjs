@@ -30,6 +30,8 @@ if (!tag || !dir) {
   process.exit(2);
 }
 const version = tag.replace(/^v/, "");
+const [releaseMajor, releaseMinor] = version.split(".").map(Number);
+const bilingualRelease = releaseMajor > 0 || releaseMinor >= 2;
 const work = opt("work") ? resolve(opt("work")) : mkdtempSync(join(tmpdir(), "pw-smoke-"));
 mkdirSync(work, { recursive: true });
 
@@ -174,10 +176,13 @@ async function launchAndHold(exe, label) {
 // ---------------------------------------------------------------- Windows
 async function windowsSmoke() {
   const nsis = find(/-setup\.exe$/);
-  const msi = find(/\.msi$/);
+  const msis = assets.filter((name) => /\.msi$/i.test(name));
+  const msiEnglish = msis.find((name) => /(?:_|-)en-US\.msi$/i.test(name));
+  const msiChinese = msis.find((name) => /(?:_|-)zh-CN\.msi$/i.test(name));
   const cliZip = find(/^photoway-cli-.*-windows-x64\.zip$/);
   check("NSIS installer present", !!nsis);
-  check("MSI present", !!msi);
+  check("English MSI present", !!msiEnglish);
+  if (bilingualRelease) check("Chinese MSI present", !!msiChinese);
   check("CLI zip present", !!cliZip);
   if (cliZip) {
     run("powershell", ["-NoProfile", "-Command", `Expand-Archive -LiteralPath ${psq(join(dir, cliZip))} -DestinationPath ${psq(stage)} -Force`]);
@@ -208,13 +213,13 @@ async function windowsSmoke() {
 
   const installs = [
     { name: "NSIS", file: nsis, root: join(local, "Photo Way"), install: (f) => run(f, ["/S"]), uninstall: () => run(join(local, "Photo Way", "uninstall.exe"), ["/S"]) },
-    {
-      name: "MSI",
-      file: msi,
+    ...[["MSI en-US", msiEnglish], ["MSI zh-CN", msiChinese]].filter(([, file]) => file).map(([name, file]) => ({
+      name,
+      file,
       root: join(programFiles, "Photo Way"),
-      install: (f) => run("msiexec", ["/i", f, "/qn", "/norestart", "/l*v", join(work, "msi-install.log")]),
-      uninstall: (f) => run("msiexec", ["/x", f, "/qn", "/norestart", "/l*v", join(work, "msi-uninstall.log")]),
-    },
+      install: (f) => run("msiexec", ["/i", f, "/qn", "/norestart", "/l*v", join(work, `${name.replaceAll(" ", "-")}-install.log`)]),
+      uninstall: (f) => run("msiexec", ["/x", f, "/qn", "/norestart", "/l*v", join(work, `${name.replaceAll(" ", "-")}-uninstall.log`)]),
+    })),
   ];
 
   for (const t of installs) {

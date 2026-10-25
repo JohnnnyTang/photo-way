@@ -1,5 +1,7 @@
 # Photo Way
 
+[简体中文](README.zh-CN.md) · [English user guide](docs/USER_GUIDE.md) · [中文使用指南](docs/USER_GUIDE.zh-CN.md)
+
 Turn a pile of geotagged phone photos into a **portable route map**: one `.html` file
 (or a small zip) that opens by double-click, works offline, and can be shared without the app.
 
@@ -18,7 +20,7 @@ Get the latest version from the
 
 | You use | Download |
 |---|---|
-| Windows | the NSIS installer (`.exe`) or the `.msi` |
+| Windows | the NSIS installer (`.exe`) or the `.msi`; from v0.2.0, choose an English or Simplified Chinese MSI |
 | macOS (Apple silicon and Intel) | the universal `.dmg` |
 | Command line only | `photoway-cli-<version>-windows-x64.zip` or `photoway-cli-<version>-macos-universal.tar.gz` |
 
