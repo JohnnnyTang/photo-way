@@ -1,7 +1,8 @@
 import { h, icon, ICONS } from "./dom";
 import type { Item } from "./model";
 import { T } from "./strings";
-import { clockOf, formatCoord, formatDuration, parseDay } from "./util";
+import { clockOf, formatCoord, formatDuration, formatViewerDay, parseDay } from "./util";
+import type { Locale } from "../../shared/locale";
 
 export interface ModalHost {
   item(id: number): Item | undefined;
@@ -67,6 +68,22 @@ export class Modal {
 
   get currentId(): number | null {
     return this.isOpen ? (this.ids[this.index] ?? null) : null;
+  }
+
+  refreshLanguage(): void {
+    for (const [selector, label] of [[".pw-modal-close", T.modal.close], [".pw-modal-prev", T.modal.prev], [".pw-modal-next", T.modal.next]] as const) {
+      const button = this.el.querySelector<HTMLElement>(selector);
+      if (button) { button.title = label; button.setAttribute("aria-label", label); }
+    }
+    this.el.setAttribute("aria-label", T.appName);
+    if (this.isOpen) {
+      const it = this.currentId == null ? undefined : this.host.item(this.currentId);
+      if (it) this.renderInfo(it);
+      const note = this.stage.querySelector<HTMLElement>(".pw-modal-note");
+      if (note && it) note.textContent = it.kind === "video" ? T.modal.videoMissing : T.modal.thumbOnly;
+      const live = this.stage.querySelector<HTMLElement>(".pw-modal-live");
+      if (live) live.lastChild!.textContent = T.modal.liveHold;
+    }
   }
 
   open(ids: number[], id: number): void {
@@ -154,8 +171,12 @@ export class Modal {
     this.preload(this.index + 1);
     this.preload(this.index - 1);
 
-    const p = parseDay(it.day ?? (it.time ? it.time.slice(0, 10) : null));
-    const when = p ? `${p.weekday}, ${p.monthName} ${p.day}, ${p.year} · ${clockOf(it.time)}` : T.card.noTime;
+    this.renderInfo(it);
+  }
+
+  private renderInfo(it: Item): void {
+    const day = it.day ?? (it.time ? it.time.slice(0, 10) : null);
+    const when = parseDay(day) ? `${formatViewerDay(day!, document.documentElement.lang as Locale)} · ${clockOf(it.time)}` : T.card.noTime;
     const dur = formatDuration(it.dur);
     const show = h("button", { class: "pw-link", type: "button" }, icon(ICONS.pin, 14), T.modal.showOnMap);
     show.addEventListener("click", () => {

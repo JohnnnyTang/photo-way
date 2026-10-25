@@ -1,3 +1,5 @@
+import type { Locale } from "../../shared/locale";
+
 const EARTH_RADIUS_KM = 6371;
 
 export function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
@@ -33,6 +35,18 @@ export function parseDay(day: string | null | undefined): DayParts | null {
   return { year, month, day: d, monthName: MONTHS[month - 1] ?? "", weekday: WEEKDAYS[wd] ?? "" };
 }
 
+/** Format a camera-local calendar day without shifting it through the browser timezone. */
+export function formatViewerDay(day: string, locale: Locale, style: "full" | "short" | "month" = "full"): string {
+  const p = parseDay(day);
+  if (!p) return day;
+  const date = new Date(Date.UTC(p.year, p.month - 1, p.day));
+  const options: Intl.DateTimeFormatOptions = style === "month"
+    ? { month: "long", year: "numeric" }
+    : style === "short" ? { weekday: "short", month: "short", day: "numeric" }
+    : { weekday: "short", year: "numeric", month: "long", day: "numeric" };
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }).format(date);
+}
+
 /** `HH:MM` exactly as written by the camera (no time-zone conversion). */
 export function clockOf(time: string | null | undefined): string {
   const m = time ? /T(\d{2}):(\d{2})/.exec(time) : null;
@@ -46,9 +60,12 @@ export function formatDuration(sec: number | null | undefined): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function formatKm(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  return km < 100 ? `${km.toFixed(1)} km` : `${Math.round(km).toLocaleString("en-US")} km`;
+export function formatKm(km: number, locale: Locale = "en"): string {
+  if (km < 1) return `${new Intl.NumberFormat(locale).format(Math.round(km * 1000))} ${locale === "zh-CN" ? "米" : "m"}`;
+  const value = km < 100
+    ? new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(km)
+    : new Intl.NumberFormat(locale).format(Math.round(km));
+  return `${value} ${locale === "zh-CN" ? "公里" : "km"}`;
 }
 
 export function formatCoord(lat: number, lon: number): string {

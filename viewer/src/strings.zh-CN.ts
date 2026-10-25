@@ -1,4 +1,4 @@
-import { T, type Strings } from "./strings";
+import { EN, type Strings } from "./strings";
 
 const count = (n: number, unit: string) => `${n.toLocaleString("zh-CN")} ${unit}`;
 
@@ -13,6 +13,7 @@ export const T_ZH: Strings = {
     days: (n) => count(n, "天"),
     shown: (n, total) => `显示 ${n.toLocaleString("zh-CN")} / ${total.toLocaleString("zh-CN")} 项`,
     outliers: (n) => `${count(n, "处")} GPS 异常点`,
+    elevation: (gain, loss) => `↑ ${gain.toLocaleString("zh-CN")} 米 ↓ ${loss.toLocaleString("zh-CN")} 米`,
   },
   toolbar: {
     filters: "筛选", layers: "地图", theme: "主题", menu: "更多",
@@ -35,13 +36,14 @@ export const T_ZH: Strings = {
     offlineNote: "无需联网", onlineNote: "需要联网", terrainOffline: "三维地形需要网络连接",
     exaggeration: "地形夸张程度", onlineFailed: "无法加载在线地图，已显示离线地图。",
     offlineHint: "当前使用离线地图。联网后可查看更详细的地图。", projection: "投影方式",
-    attribution: T.map.attribution,
+    attribution: EN.map.attribution,
   },
   theme: {
     title: "主题", auto: "自动", light: "浅色", dark: "深色",
     dusk: "暮色", paper: "纸张", forest: "森林",
   },
   menu: {
+    language: "语言 / Language",
     exportCorrections: "导出修正", exportCorrectionsHint: "将位置修正和隐藏项目下载为 JSON 文件",
     saveCopy: "保存副本", saveCopyHint: "下载包含当前编辑内容的页面",
     saveCopyKeepHidden: "在副本中保留隐藏项目", saveCopyGo: "下载副本",
