@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[serde(rename_all = "camelCase")]
 pub struct ImportRequest {
     pub source: String,
