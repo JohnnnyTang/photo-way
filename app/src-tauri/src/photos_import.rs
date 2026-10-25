@@ -36,7 +36,10 @@ fn valid_day(day: &str) -> bool {
     if b.len() != 10
         || b[4] != b'-'
         || b[7] != b'-'
-        || !b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+        || !b
+            .iter()
+            .enumerate()
+            .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
     {
         return false;
     }
@@ -75,8 +78,7 @@ pub fn run(
         .tempdir()
         .map_err(|e| e.to_string())?;
     let script = directory.path().join("import.applescript");
-    std::fs::write(&script, include_str!("photos_import.applescript"))
-        .map_err(|e| e.to_string())?;
+    std::fs::write(&script, include_str!("photos_import.applescript")).map_err(|e| e.to_string())?;
     let export_dir = directory.path().join("originals");
     let progress_file = directory.path().join("progress.txt");
     std::fs::create_dir(&export_dir).map_err(|e| e.to_string())?;
@@ -135,7 +137,9 @@ pub fn run(
         for batch in std::fs::read_dir(&export_dir).map_err(|e| e.to_string())? {
             let batch = batch.map_err(|e| e.to_string())?;
             if batch.file_type().map_err(|e| e.to_string())?.is_dir() {
-                exported += std::fs::read_dir(batch.path()).map_err(|e| e.to_string())?.count();
+                exported += std::fs::read_dir(batch.path())
+                    .map_err(|e| e.to_string())?
+                    .count();
             }
         }
         if exported < count {
