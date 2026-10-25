@@ -1,4 +1,5 @@
 import type { Item, Project } from "./model";
+import { viewerLanguageKey, type Locale } from "../../shared/locale";
 
 export interface Fix {
   lat: number;
@@ -25,6 +26,18 @@ export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export const editsKey = (projectId: string) => `photoway:${projectId}:edits`;
 export const PREFS_KEY = "photoway:prefs";
+
+export function loadLanguage(projectId: string, storage: StorageLike | null = safeStorage()): Locale | null {
+  try {
+    const value = storage?.getItem(viewerLanguageKey(projectId));
+    return value === "en" || value === "zh-CN" ? value : null;
+  } catch { return null; }
+}
+
+export function saveLanguage(projectId: string, locale: Locale, storage: StorageLike | null = safeStorage()): boolean {
+  try { storage?.setItem(viewerLanguageKey(projectId), locale); return !!storage; }
+  catch { return false; }
+}
 
 export function safeStorage(): StorageLike | null {
   try {

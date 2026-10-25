@@ -75,6 +75,16 @@ Unzip first, then double-click index.html.
 
 Everything runs offline in your browser. Online map layers need an internet connection;
 the built-in world map works without one.
+
+Use More > Language / 语言 to switch between English and Simplified Chinese.
+
+这是 Photo Way 地图文件夹。
+
+请先解压，再双击 index.html。
+
+地图可在浏览器中离线使用。在线地图图层需要网络连接；内置世界地图无需联网。
+
+在“更多 > 语言 / Language”中可切换英语和简体中文。
 ";
 
 fn other(e: impl Into<anyhow::Error>) -> Error {

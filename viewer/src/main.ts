@@ -3,7 +3,8 @@ import "./style.css";
 import { App, type MountOptions } from "./app";
 import { findProject } from "./data";
 import type { Project } from "./model";
-import { T } from "./strings";
+import { normalizeLocale } from "../../shared/locale";
+import { viewerStrings } from "./catalog";
 
 export type { MountOptions } from "./app";
 export type { Project } from "./model";
@@ -29,7 +30,7 @@ function autoMount(): void {
   if (!el) return;
   const project = findProject();
   if (!project) {
-    el.textContent = T.loadError;
+    el.textContent = viewerStrings(normalizeLocale(navigator.language) ?? "en").loadError;
     return;
   }
   (window as unknown as { __photoway__?: PhotoWayHandle }).__photoway__ = mount(el, project, { mode: "export" });

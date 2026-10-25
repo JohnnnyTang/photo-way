@@ -1,8 +1,9 @@
 import { dayKeyOf } from "./days";
 import type { Item } from "./model";
 import { legKind } from "./route";
-import { T } from "./strings";
+import { viewerStrings } from "./catalog";
 import { formatKm, haversineKm } from "./util";
+import type { Locale } from "../../shared/locale";
 
 /** Altitude changes smaller than this are noise (photo altitudes jitter by several metres) and are not counted. */
 export const ELEVATION_STEP_M = 10;
@@ -134,8 +135,19 @@ export function computeTripStats(points: readonly Item[], suspects: ReadonlySet<
 }
 
 /** "12 min", "7 h 12 min", "3 h", and from a day on "3 d 14 h". */
-export function formatSpan(ms: number): string {
+export function formatSpan(ms: number, locale: Locale = "en"): string {
   const min = Math.round(ms / 60_000);
+  if (locale === "zh-CN") {
+    if (min < 60) return `${Math.max(1, min)} 分钟`;
+    if (min >= 24 * 60) {
+      const h = Math.round(min / 60);
+      const d = Math.floor(h / 24);
+      return h % 24 ? `${d} 天 ${h % 24} 小时` : `${d} 天`;
+    }
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h} 小时 ${m} 分钟` : `${h} 小时`;
+  }
   if (min < 60) return `${Math.max(1, min)} min`;
   if (min >= 24 * 60) {
     const h = Math.round(min / 60);
@@ -148,11 +160,11 @@ export function formatSpan(ms: number): string {
 }
 
 /** "42.3 km · ↑ 610 m ↓ 580 m · 7 h 12 min"; whatever is unknown (or zero distance) is left out. */
-export function formatStat(s: DayStat | undefined, withSpan = true): string {
+export function formatStat(s: DayStat | undefined, withSpan = true, locale: Locale = "en"): string {
   if (!s) return "";
   const parts: string[] = [];
-  if (s.distanceKm > 0) parts.push(formatKm(s.distanceKm));
-  if (s.elevation) parts.push(T.stats.elevation(Math.round(s.elevation.gain), Math.round(s.elevation.loss)));
-  if (withSpan && s.spanMs != null) parts.push(formatSpan(s.spanMs));
+  if (s.distanceKm > 0) parts.push(formatKm(s.distanceKm, locale));
+  if (s.elevation) parts.push(viewerStrings(locale).stats.elevation(Math.round(s.elevation.gain), Math.round(s.elevation.loss)));
+  if (withSpan && s.spanMs != null) parts.push(formatSpan(s.spanMs, locale));
   return parts.join(" · ");
 }

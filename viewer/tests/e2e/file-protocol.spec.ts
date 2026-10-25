@@ -48,6 +48,55 @@ test("visibility edits persist and a saved copy reopens with its own project id"
   await copy.close();
 });
 
+test("language switch keeps selection, survives reload, and becomes a saved copy's default", async ({ page }, testInfo) => {
+  await page.goto(pageUrl("single"));
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.items)).toBe(295);
+  await page.locator(".pw-tl-item").first().click();
+  const before = await page.evaluate(() => (window as any).__photoway__.stats());
+  await page.getByRole("button", { name: "More" }).click();
+  await page.locator(".pw-copyitem").click();
+  await page.locator("#pw-keep-hidden").check();
+  await page.locator('.pw-language-opt[lang="zh-CN"]').click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.getByRole("button", { name: "筛选" })).toBeVisible();
+  const after = await page.evaluate(() => (window as any).__photoway__.stats());
+  expect(after.selected).toBe(before.selected);
+  expect(after.onMap).toBe(before.onMap);
+  await page.getByRole("button", { name: "更多" }).click();
+  await page.locator(".pw-copyitem").click();
+  await expect(page.locator("#pw-keep-hidden")).toBeChecked();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await page.getByRole("button", { name: "更多" }).click();
+  await page.locator(".pw-copyitem").click();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.locator(".pw-copybox .pw-primary").click()]);
+  const copyPath = testInfo.outputPath("chinese-copy.html");
+  await download.saveAs(copyPath);
+  const fresh = await page.context().browser()!.newContext({ locale: "en-US" });
+  const copy = await fresh.newPage();
+  await copy.goto(pathToFileURL(copyPath).href);
+  await expect(copy.locator("html")).toHaveAttribute("lang", "zh-CN");
+  const embedded = await copy.locator("#pw-data").evaluate((el) => JSON.parse(el.textContent!) as { options: { lang?: string } });
+  expect(embedded.options.lang).toBe("zh-CN");
+  await fresh.close();
+});
+
+test("language switching works offline when browser storage is blocked", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", { configurable: true, get: () => { throw new Error("storage blocked"); } });
+  });
+  await page.goto(pageUrl("single"));
+  await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.items)).toBe(295);
+  await page.context().setOffline(true);
+  await page.getByRole("button", { name: "More" }).click();
+  await page.locator('.pw-language-opt[lang="zh-CN"]').click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.getByRole("button", { name: "筛选" })).toBeVisible();
+  await page.getByRole("button", { name: "更多" }).click();
+  await page.locator('.pw-language-opt[lang="en"]').click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+});
+
 test("filters, day navigation, and keyboard media navigation work offline", async ({ page }) => {
   await page.goto(pageUrl("single"));
   await expect.poll(() => page.evaluate(() => (window as any).__photoway__?.stats()?.map?.loaded), { timeout: 30_000 }).toBe(true);
