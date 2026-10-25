@@ -2,6 +2,8 @@
 
 Status: planned on 2026-10-24 at the owner's request. Baseline: released v0.1.0. Target: v0.2.0; no calendar deadline. This document plans the work; it does not claim that localization is implemented or tested.
 
+Since this plan was written, v0.1.1 has also been released. Session N's worktree starts from that newer `main` commit; the v0.1.x compatibility and upgrade checks below apply to both published versions.
+
 ## 1. Release outcome
 
 Users can install Photo Way, import media, preview a trip, export it, and share an offline map entirely through English or Simplified Chinese UI. Both languages ship together in every subsequent release. A recipient can change the exported map's language without installing Photo Way or connecting to the internet.

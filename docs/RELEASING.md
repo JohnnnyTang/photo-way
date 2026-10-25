@@ -11,7 +11,8 @@ forward with the next patch version.
    `Cargo.lock` (workspace members), the three `package.json` files, `package-lock.json` and
    `app/src-tauri/tauri.conf.json`. `node scripts/version-sync.mjs --check` must pass.
 3. **CHANGELOG.md**: rename `[Unreleased]` content into a `## [X.Y.Z] - YYYY-MM-DD` section. The workflow
-   fails if that section is empty or missing, and uses it as the release notes.
+   fails if that section is empty or missing, and uses it as the release notes. From v0.2.0 onward, include
+   nonempty `### English` and `### 简体中文` subsections; the tag workflow requires both.
 4. **Open a PR, merge it** once CI is green (size budgets, tests, e2e).
 5. **Tag the merge commit**: `git tag vX.Y.Z <sha> && git push origin vX.Y.Z`. Tags with a hyphen
    (`v1.0.0-rc.1`) become prereleases.
@@ -29,8 +30,9 @@ forward with the next patch version.
 
 | Asset | Notes |
 |---|---|
-| `Photo-Way_X.Y.Z_x64-setup.exe` | NSIS, per-user install, no admin |
-| `Photo-Way_X.Y.Z_x64_en-US.msi` | registers machine-wide, files under %LOCALAPPDATA% (see WAVE3_GATE.md) |
+| `Photo-Way_X.Y.Z_x64-setup.exe` | One NSIS installer with English and Simplified Chinese; per-user install, no admin |
+| `Photo-Way_X.Y.Z_x64_en-US.msi` | English installer; the app includes both UI languages |
+| `Photo-Way_X.Y.Z_x64_zh-CN.msi` | Simplified Chinese installer from v0.2.0; the app includes both UI languages |
 | `Photo-Way_X.Y.Z_universal.dmg` | arm64 + x86_64 |
 | `photoway-cli-X.Y.Z-windows-x64.zip`, `photoway-cli-X.Y.Z-macos-universal.tar.gz` | CLI plus LICENSE and notices |
 | `third-party-sources-X.Y.Z.tar.gz` | LGPL corresponding source (libheif, libde265) |
@@ -44,7 +46,7 @@ forward with the next patch version.
 `scripts/release-smoke.mjs`:
 
 - verifies `SHA256SUMS.txt` against every asset;
-- Windows: silent NSIS install (`/S`) and MSI install (`/qn`), one after the other; checks the exe, Start Menu
+- Windows: silent NSIS install (`/S`) and both MSI variants (`/qn`) from v0.2.0, one after the other; checks the exe, Start Menu
   shortcut, uninstall registry entry, exe file and product version, launches the app and checks it stays alive
   with a window for 10 s, then uninstalls silently and asserts files, shortcut and registry entry are gone;
 - macOS: mounts the dmg, copies the app to a temp folder, `lipo -archs`, `codesign` verification (ad-hoc),
@@ -65,6 +67,9 @@ The workflow needs `contents: write` because GitHub only shows draft releases to
 ## Manual checks
 
 Automation proves the bundle installs, starts and has the right version. It does not prove the app works.
+For bilingual releases, check the NSIS language selector, English and Chinese installer text, app language
+switching after each installer, and preservation of an existing app preference during upgrade. Installer
+language must not overwrite the app preference. Check uninstall after each variant.
 Before publishing, on a real Mac (Apple Silicon if possible): open the dmg, drag the app out, right-click, Open
 (unsigned build), drop a folder with geotagged photos, preview the map, export a single HTML file and open it,
 quit with Cmd+Q. Compare with the Windows flow in `docs/WAVE2_GATE.md`.

@@ -22,7 +22,7 @@ Get the latest version from the
 
 | You use | Download |
 |---|---|
-| Windows | the NSIS installer (`.exe`) or the `.msi` |
+| Windows | the NSIS installer (`.exe`) or the `.msi`; from v0.2.0, choose an English or Simplified Chinese MSI |
 | macOS (Apple silicon and Intel) | the universal `.dmg` |
 | Command line only | `photoway-cli-<version>-windows-x64.zip` or `photoway-cli-<version>-macos-universal.tar.gz` |
 

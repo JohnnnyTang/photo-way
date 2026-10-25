@@ -4,7 +4,28 @@
 
 把带有位置信息的照片和视频整理成可分享的旅行路线图。导出的单个 HTML 文件、文件夹或 ZIP 包可以在浏览器中打开；离线底图无需联网。
 
-> **v0.1.0 已发布，界面目前以英语为主。** 简体中文界面正在为 **v0.2.0** 开发；请勿将开发中的功能视为当前版本已支持。进度见 [Wave 4 计划](docs/WAVE4_PLAN.md)。
+![示例行程的路线、照片图钉和时间线](docs/img/viewer-overview.png)
+
+Photo Way 是适用于 Windows 和 macOS 的桌面应用，也提供 `photoway` 命令行工具。导入、预览和导出都在本机完成；应用不会上传你的文件。截图使用的是合成示例行程。
+
+> **当前发布版为 v0.1.1，界面仍以英语为主。** 简体中文界面正在为 **v0.2.0** 开发；请勿将开发中的功能视为当前版本已支持。进度见 [Wave 4 计划](docs/WAVE4_PLAN.md)。
+
+## 下载
+
+从[最新发布页](https://github.com/JohnnnyTang/photo-way/releases/latest)下载 Windows 安装程序（`.exe` 或 `.msi`）、macOS 通用版 `.dmg`，或仅含命令行工具的压缩包。发布页还提供 `SHA256SUMS.txt`、第三方许可证和相关源代码。安装包目前未签名，首次打开时系统可能出现安全提示；操作方法见[中文使用指南](docs/USER_GUIDE.zh-CN.md#安装)。
+
+## 快速开始
+
+打开应用，拖入照片文件夹，点击 **Build preview** 查看地图，再点击 **Export...** 选择导出格式。导出完成后可从应用中打开结果。v0.2.0 的中文界面尚未发布，因此当前按钮仍显示英文。
+
+命令行示例：
+
+```sh
+photoway inspect ~/Photos/trip
+photoway build ~/Photos/trip -o trip.html
+photoway build ~/Photos/trip -o trip.zip --format zip --full web
+photoway serve trip.zip
+```
 
 ## 功能
 
@@ -12,7 +33,15 @@
 - 在地图和时间线上查看行程，按日期浏览，并过滤明显异常的 GPS 位置。
 - 导出独立 HTML 文件，或包含媒体文件的文件夹和 ZIP 包。
 - 导出的地图可直接从本地磁盘打开；联网时还可使用卫星、地形等在线底图。
+- 可按日期查看距离、爬升、下降和用时；可以修正图钉位置、隐藏项目，并将编辑结果保存为副本。
+- 导出时可移除 EXIF、降低坐标精度，或只包含缩略图。**路线图仍会显示拍摄地点**，分享前请检查敏感位置。
 - 支持 Windows 和 macOS。
+
+## 文档
+
+- [中文使用指南](docs/USER_GUIDE.zh-CN.md)：安装、保留手机照片位置信息、使用应用和地图、隐私、命令行、故障排查。
+- [英文使用指南](docs/USER_GUIDE.md)及[构建文档](docs/BUILDING.md)。
+- [更新记录](CHANGELOG.md)、[项目架构](docs/ARCHITECTURE.md)与[数据格式](docs/DATA_CONTRACT.md)。
 
 ## 开发
 

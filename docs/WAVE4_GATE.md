@@ -2,6 +2,8 @@
 
 Status: in progress. This records implementation evidence; it is not a release sign-off.
 
+This N worktree starts from the newer v0.1.1 `main` commit. The K and L/M descriptions below record work in the shared checkout; those changes are not in this worktree yet. Re-run their checks after integration.
+
 ## Stream K — contracts
 
 - Locale normalization, precedence, formatting, and in-place change notification: `shared/locale.ts`.
@@ -40,9 +42,17 @@ Pending: full L/M integration, export/browser tests, installer QA, documentation
 
 - English and Simplified Chinese README/user guides are linked in both directions. Their v0.2.0 language instructions explicitly describe work in progress until L/M integration is verified.
 - The Tauri bundle config requests NSIS `English`/`SimpChinese` with a visible selector and separate WiX `en-US`/`zh-CN` MSI outputs. Tauri documents that MSI list entries create separate files with language suffixes; NSIS remains one multilingual setup. Installer language does not set the app preference.
-- `scripts/changelog-notes.mjs` requires nonempty `### English` and `### 简体中文` sections for tagged versions from v0.2.0 onward; historical v0.1.0 notes remain valid. `scripts/check-windows-installers.mjs` makes the release package step reject missing or duplicate Windows installer variants.
+- `scripts/changelog-notes.mjs` requires nonempty `### English` and `### 简体中文` sections for tagged versions from v0.2.0 onward; historical v0.1.x notes remain valid. `scripts/check-windows-installers.mjs` makes the release package step reject missing or duplicate Windows installer variants.
 - CI runs the viewer locale/catalog parity tests in its viewer test step and typechecks the app UI before the Rust matrix builds it. The existing end-to-end job runs Chromium, Firefox, and WebKit on Windows and macOS; bilingual scenarios still need to land with M.
 - Installer size limits remain at the existing 15 MiB per file. Measure the produced NSIS, both MSI files, macOS DMG, and viewer/output budgets at integration; no budget has been raised.
-- Local checks on 2026-10-24: Tauri CLI `inspect wix-upgrade-code` accepted the configuration and reported the existing default upgrade code `80825a6b-63ae-5b29-93b5-4e137820de6b`; the Windows asset check passed a fixture containing one NSIS and two locale-suffixed MSI files; v0.1.0 changelog extraction with `--require` passed; v0.2.0 with `--require` failed because release notes have not been written yet (expected); `npm run typecheck -w app` and the viewer locale tests passed; `git diff --check` passed for N-owned tracked files. A checkout-wide diff check currently reports a trailing blank line in L's concurrently edited `app/ui/src/main.ts`. These checks do not prove installer build or install behavior.
+- Earlier local checks in the shared checkout on 2026-10-24: Tauri CLI `inspect wix-upgrade-code` accepted the configuration and reported default upgrade code `80825a6b-63ae-5b29-93b5-4e137820de6b`; a fixture with one NSIS and two locale-suffixed MSI files passed the asset check; v0.1.0 changelog extraction with `--require` passed; v0.2.0 with `--require` failed because release notes have not been written yet (expected); app typecheck and viewer locale tests passed. Re-run checks in this worktree after its adaptation to v0.1.1. These checks do not prove installer build or install behavior.
 
 Pending: actual Windows/macOS bundle builds, install/upgrade/uninstall smoke checks, browser matrix after M integration, translation review after L/M integration, and v0.2.0 release notes/version sync. No tag or release has been created.
+
+### N worktree recheck on the v0.1.1 baseline
+
+- Branch: `codex/wave4-session-n`, based on `c4f6cf3` (released v0.1.1). The existing long English user guide and release smoke checks were retained and extended. The Chinese guide now covers installation, getting geotagged originals, app and viewer controls, privacy, CLI use, and troubleshooting.
+- `node --check` passed for `changelog-notes.mjs`, `check-windows-installers.mjs`, and `release-smoke.mjs`; `git diff --check` passed.
+- `node scripts/changelog-notes.mjs v0.1.1 --require` passed. The same command for v0.2.0 rejected the missing section as expected.
+- A Windows artifact fixture with NSIS, `en-US` MSI, and `zh-CN` MSI passed; removing the Chinese MSI made the check fail as expected.
+- The release smoke script is prepared to install and uninstall both MSI variants from v0.2.0 onward. No real installers have been built or smoke-tested in this worktree.
