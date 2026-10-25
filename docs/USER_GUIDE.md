@@ -254,7 +254,7 @@ photoway serve trip-dir
 
 ## Languages in v0.2.0
 
-The bilingual controls described here are being implemented and are not available in v0.1.1. The planned desktop **Language / 语言** setting offers **System**, **English**, and **简体中文**. A separate export-language choice sets the initial language of a new export. Its recipient can switch between English and Simplified Chinese in the viewer; the choice is saved for that trip when browser storage is available. Switching languages does not translate photo titles or filenames. Existing v0.1.x exports keep their original embedded viewer; create a new export to gain bilingual controls. Operating system file picker labels and third-party map labels may follow their own language settings.
+The desktop **Language / 语言** setting offers **System**, **English**, and **简体中文**. A separate export-language choice sets the initial language of a new export. Its recipient can switch between English and Simplified Chinese in the viewer; the choice is saved for that trip when browser storage is available. Switching languages does not translate photo titles or filenames. Existing v0.1.x exports keep their original embedded viewer; create a new export to gain bilingual controls. Operating system file picker labels and third-party map labels may follow their own language settings.
 
 Installer language only controls installer text. It does not set the app's saved language preference. Both Windows MSI variants contain the same bilingual app; the NSIS setup includes a language selector.
 

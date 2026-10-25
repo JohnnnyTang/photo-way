@@ -97,7 +97,7 @@ fn show_about<R: Runtime>(app: &AppHandle<R>) {
     let language = if chinese { "zh-CN" } else { "en" };
     let handle = app.clone();
     app.dialog()
-        .message(about_text(&version, &language))
+        .message(about_text(&version, language))
         .title(if chinese {
             "关于 Photo Way"
         } else {

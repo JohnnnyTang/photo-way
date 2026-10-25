@@ -56,3 +56,16 @@ Pending: actual Windows/macOS bundle builds, install/upgrade/uninstall smoke che
 - `node scripts/changelog-notes.mjs v0.1.1 --require` passed. The same command for v0.2.0 rejected the missing section as expected.
 - A Windows artifact fixture with NSIS, `en-US` MSI, and `zh-CN` MSI passed; removing the Chinese MSI made the check fail as expected.
 - The release smoke script is prepared to install and uninstall both MSI variants from v0.2.0 onward. No real installers have been built or smoke-tested in this worktree.
+
+## Release preparation (v0.2.0)
+
+Completed on 2026-10-24 on `codex/wave4-integration` after merging K/L/M/N:
+
+- `node scripts/version-sync.mjs --check` — all 11 versions agree on 0.2.0.
+- `node scripts/changelog-notes.mjs v0.2.0 --require` — English and 简体中文 sections present.
+- `node scripts/check-text.mjs`, `git diff --check`, `cargo fmt --all --check` — passed.
+- `cargo clippy --workspace --all-targets -D warnings` — passed after removing a needless borrow in `menu.rs`.
+- `cargo test --workspace` — all suites passed.
+- Viewer typecheck, 36 unit tests, build and size budgets (viewer 468.9 KiB gz / 512, basemap 580.8 KiB / 600); app typecheck and build — passed.
+
+Pending: CI on the release PR, Release workflow artifacts, release smoke against the draft, and the manual installer/macOS checks in `docs/RELEASING.md`.

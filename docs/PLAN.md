@@ -1,6 +1,6 @@
 # Photo Way — Development Plan
 
-> Status: **v0.1.1 released**. Waves 0–3 are merged; the other Wave 3 extras remain in the backlog. Wave 4 targets a bilingual v0.2.0 release. See [the Wave 4 plan](WAVE4_PLAN.md) and gates in `docs/WAVE1_GATE.md`, `docs/WAVE2_GATE.md`, `docs/WAVE3_GATE.md`, and `docs/WAVE4_GATE.md`.
+> Status: **v0.2.0 in release** (bilingual English + Simplified Chinese). Waves 0–4 are merged; the other Wave 3 extras remain in the backlog. See [the Wave 4 plan](WAVE4_PLAN.md) and gates in `docs/WAVE1_GATE.md`, `docs/WAVE2_GATE.md`, `docs/WAVE3_GATE.md`, and `docs/WAVE4_GATE.md`.
 > Goal: a tiny, elegant desktop app (Windows + macOS) that turns a pile of geotagged
 > phone photos/videos into a **portable, self-contained, shareable** route map —
 > a single `.html` file or a small zip bundle — that works from `file://` and over HTTP.
