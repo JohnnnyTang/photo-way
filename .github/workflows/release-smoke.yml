@@ -1,0 +1,75 @@
+name: Release smoke
+
+# Installs and runs the real release assets (draft or published) on clean hosted runners.
+# Logic lives in scripts/release-smoke.mjs and can be run locally.
+#
+# Tag: workflow_dispatch input `tag`; release:published uses the released tag; pull_request uses the newest release
+# including drafts. Draft releases are only visible to tokens with write access, hence contents: write.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to test (blank = newest release, drafts included)"
+        required: false
+        type: string
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - ".github/workflows/release-smoke.yml"
+      - "scripts/release-smoke.mjs"
+      - "scripts/gen-e2e-inputs.mjs"
+
+concurrency:
+  group: release-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    name: Smoke (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-latest }
+          - { name: macos-arm64, os: macos-latest }
+          - { name: macos-x64, os: macos-15-intel }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          tag="${INPUT_TAG:-$EVENT_TAG}"
+          if [ -z "$tag" ]; then
+            tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
+          fi
+          test -n "$tag" || { echo "no release found" >&2; exit 1; }
+          echo "Testing $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Download assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ steps.tag.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/assets"
+          ls -la "$RUNNER_TEMP/assets"
+      - name: Smoke test
+        shell: bash
+        run: node scripts/release-smoke.mjs --tag "${{ steps.tag.outputs.tag }}" --dir "$RUNNER_TEMP/assets" --work "$RUNNER_TEMP/smoke"
+      - name: Install logs
+        if: failure() && runner.os == 'Windows'
+        shell: bash
+        run: tail -n 80 "$RUNNER_TEMP"/smoke/msi-*.log || true
