@@ -34,7 +34,8 @@ first time; [the user guide](docs/USER_GUIDE.md#installing) shows how to open th
 
 ## Quick start
 
-**App.** Open Photo Way, drop a folder of photos (or click *Add photos...* / *Add folder...*),
+**App.** Open Photo Way, drop a folder of photos (or click *Add photos...* / *Add folder...*;
+on macOS, *Import from Photos...* can use a Photos selection or capture date range),
 click *Build preview*, then *Export...* and pick a format. Open the result in your browser from the
 export panel. Step by step: [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 

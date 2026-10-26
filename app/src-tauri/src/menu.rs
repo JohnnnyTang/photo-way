@@ -31,6 +31,9 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, language: &str) -> tauri::Result<Me
     let add_folder = MenuItemBuilder::with_id("add-folder", label("Add folder...", "添加文件夹…"))
         .accelerator("CmdOrCtrl+Shift+O")
         .build(app)?;
+    let import_photos =
+        MenuItemBuilder::with_id("import-photos", label("Import from Photos...", "从“照片”导入…"))
+            .build(app)?;
     let export = MenuItemBuilder::with_id("export", label("Export...", "导出…"))
         .accelerator("CmdOrCtrl+E")
         .build(app)?;
@@ -38,9 +41,11 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, language: &str) -> tauri::Result<Me
 
     let mut file = SubmenuBuilder::new(app, label("File", "文件"))
         .item(&add_files)
-        .item(&add_folder)
-        .separator()
-        .item(&export);
+        .item(&add_folder);
+    if cfg!(target_os = "macos") {
+        file = file.item(&import_photos);
+    }
+    file = file.separator().item(&export);
     if cfg!(not(target_os = "macos")) {
         file = file
             .separator()
@@ -81,7 +86,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, language: &str) -> tauri::Result<Me
 
 pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     match event.id().as_ref() {
-        id @ ("add-files" | "add-folder" | "export") => {
+        id @ ("add-files" | "add-folder" | "import-photos" | "export") => {
             // The webview owns pickers and the export dialog.
             let _ = app.emit("pw-menu", id);
         }

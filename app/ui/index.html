@@ -24,6 +24,7 @@
         <button id="btn-files" data-s="addPhotos"></button>
         <button id="btn-folder" data-s="addFolder"></button>
       </div>
+      <button id="btn-photos-library" data-s="importPhotos" hidden></button>
     </section>
 
     <section class="card" id="summary" hidden>
@@ -105,6 +106,27 @@
 </div>
 
 <div id="drop-overlay" hidden><p data-s="dropOverlay"></p></div>
+
+<dialog id="photos-dlg">
+  <form method="dialog" id="photos-form">
+    <h2 data-s="photosTitle"></h2>
+    <label class="radio"><input type="radio" name="photos-source" value="selection" checked> <span data-s="photosSelection"></span></label>
+    <p class="muted" data-s="photosSelectionHint"></p>
+    <button type="button" id="photos-open" data-s="photosOpen"></button>
+    <label class="radio"><input type="radio" name="photos-source" value="range"> <span data-s="photosRange"></span></label>
+    <div id="photos-dates" class="row" hidden>
+      <label class="field"><span data-s="photosStart"></span><input id="photos-start" type="date"></label>
+      <label class="field"><span data-s="photosEnd"></span><input id="photos-end" type="date"></label>
+    </div>
+    <label class="check"><input id="photos-favorites" type="checkbox"> <span data-s="photosFavorites"></span></label>
+    <label class="check"><input id="photos-location" type="checkbox"> <span data-s="photosLocation"></span></label>
+    <p class="muted" data-s="photosOriginalsHint"></p>
+    <div class="row end">
+      <button type="button" id="photos-cancel" data-s="cancel"></button>
+      <button type="submit" class="primary" data-s="photosImportGo"></button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="export-dlg">
   <form method="dialog" id="export-form">

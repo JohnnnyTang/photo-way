@@ -1,5 +1,6 @@
 /target/
 node_modules/
+.npm-cache/
 dist/
 app/src-tauri/gen/schemas/
 app/src-tauri/release-bundle.config.json

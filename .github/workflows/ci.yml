@@ -82,6 +82,10 @@ jobs:
       - run: npm run typecheck -w app
       - run: npm run build -w app
 
+      - name: Compile macOS Photos automation script
+        if: runner.os == 'macOS'
+        run: osacompile -o "$RUNNER_TEMP/photoway-photos-import.scpt" app/src-tauri/src/photos_import.applescript
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt

@@ -21,6 +21,7 @@ use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::photos_import::{self, ImportRequest};
 use crate::protocol::{self, Snapshot};
 use crate::settings::{self, Settings};
 use crate::summary;
@@ -36,6 +37,8 @@ pub struct Session {
     /// Bumped whenever the preview content changes.
     version: u64,
     cache_dir: Option<PathBuf>,
+    /// Temporary Photos exports remain available until Start over or app exit.
+    imports: Vec<tempfile::TempDir>,
 }
 
 pub struct AppState {
@@ -235,7 +238,31 @@ fn rebuild(app: &AppHandle, settings: &Settings, keep_id: bool) -> Result<Value,
 
 #[tauri::command]
 pub fn app_info() -> Value {
-    json!({ "version": env!("CARGO_PKG_VERSION"), "previewUrl": protocol::url_for("preview.html") })
+    json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "previewUrl": protocol::url_for("preview.html"),
+        "macos": cfg!(target_os = "macos")
+    })
+}
+
+#[tauri::command]
+pub fn open_photos() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("open")
+            .args(["-a", "Photos"])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("Could not open Photos.app.".into())
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Photos.app is available on macOS only.".into())
+    }
 }
 
 #[tauri::command]
@@ -266,11 +293,15 @@ pub fn cancel(state: tauri::State<'_, AppState>) {
 pub fn reset(state: tauri::State<'_, AppState>) {
     let mut s = state.session();
     let cache_dir = s.cache_dir.take();
+    let imports = std::mem::take(&mut s.imports);
     *s = Session {
         cache_dir,
         version: s.version + 1,
         ..Session::default()
     };
+    drop(s);
+    // Large Photos imports may contain gigabytes; do not block the UI during deletion.
+    std::thread::spawn(move || drop(imports));
 }
 
 /// Scans `paths` (added to the earlier ones when `append`). Result: a [`summary::Summary`].
@@ -310,6 +341,32 @@ pub fn scan(app: AppHandle, paths: Vec<String>, append: bool) -> Result<(), Stri
         s.cache_dir = cache;
         s.version += 1;
         serde_json::to_value(summary).map_err(|e| Error::Other(e.into()))
+    })
+}
+
+/// Exports Photos.app originals to session-owned temporary storage, ready for the usual scanner.
+#[tauri::command]
+pub fn import_photos(app: AppHandle, request: ImportRequest) -> Result<(), String> {
+    request.validate()?;
+    spawn_op(&app, "import", move |app, progress| {
+        progress.update(0, 0, "Photos");
+        let imported = photos_import::run(&request, &progress.cancel, |done, total| {
+            progress.update(done, total, "Photos")
+        })
+        .map_err(|e| {
+            if e == "cancelled" {
+                Error::Cancelled
+            } else {
+                Error::Other(anyhow::anyhow!(e))
+            }
+        })?;
+        let count = imported.count;
+        if count == 0 {
+            return Ok(json!({ "count": 0 }));
+        }
+        let path = photos_import::export_path(&imported.directory);
+        app.state::<AppState>().session().imports.push(imported.directory);
+        Ok(json!({ "count": count, "path": path.display().to_string() }))
     })
 }
 

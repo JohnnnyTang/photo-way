@@ -3,7 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppLanguage, Locale } from "../../../shared/locale";
 
-export type Phase = "scan" | "process" | "export";
+export type Phase = "import" | "scan" | "process" | "export";
+export interface PhotosImportRequest {
+  source: "selection" | "range";
+  startDay: string | null;
+  endDay: string | null;
+  favoritesOnly: boolean;
+  locationOnly: boolean;
+}
+export interface PhotosImportResult { count: number; path?: string }
 export type FullSize = "none" | "web" | "original";
 export type FormatId = "html" | "dir" | "zip";
 
@@ -78,13 +86,15 @@ export interface Finished {
 }
 
 export const api = {
-  info: () => invoke<{ version: string; previewUrl: string }>("app_info"),
+  info: () => invoke<{ version: string; previewUrl: string; macos: boolean }>("app_info"),
   getSettings: () => invoke<Settings>("get_settings"),
   saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
   setMenuLanguage: (language: Locale) => invoke<void>("set_menu_language", { language }),
   cancel: () => invoke<void>("cancel"),
   reset: () => invoke<void>("reset"),
   scan: (paths: string[], append: boolean) => invoke<void>("scan", { paths, append }),
+  importPhotos: (request: PhotosImportRequest) => invoke<void>("import_photos", { request }),
+  openPhotos: () => invoke<void>("open_photos"),
   setPoster: (index: number, bytes: Uint8Array) =>
     invoke<void>("set_poster", bytes, { headers: { index: String(index) } }),
   process: (settings: Settings) => invoke<void>("process", { settings }),
