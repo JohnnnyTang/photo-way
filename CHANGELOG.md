@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-26
+
+### English
+
+- On macOS, import multiple selected items directly from Photos, or import all items in an inclusive capture date range. Filter either import by favorites and whether an item has a location.
+- The regular file picker now supports selecting multiple photos and videos in one dialog.
+- Photos imports use unmodified originals in temporary local storage. macOS may request permission to control Photos, and iCloud originals may take time to download. Location edits made only inside Photos may not be present in the original files.
+
+### 简体中文
+
+- macOS 现在可直接从“照片”导入当前选中的多个项目，或导入指定拍摄日期范围（包含起止日期）内的所有项目；两种方式都可按收藏和是否带位置信息筛选。
+- 普通文件选择框现在支持一次多选照片和视频。
+- 从“照片”导入时，应用会将未经修改的原件暂存到本地。macOS 可能请求控制“照片”的权限，iCloud 原件也可能需要时间下载。仅在“照片”中修改的位置可能不会保存在原件内。
+
 ## [0.2.0] - 2026-10-24
 
 ### English
